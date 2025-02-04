@@ -1,10 +1,12 @@
 package http
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/aviate-labs/agent-go"
 	"github.com/aviate-labs/agent-go/candid/idl"
 	"github.com/aviate-labs/agent-go/principal"
-	"strings"
 )
 
 type Agent struct {
@@ -14,8 +16,8 @@ type Agent struct {
 	*agent.Agent
 }
 
-func NewAgent(canisterId principal.Principal, cfg agent.Config) (*Agent, error) {
-	a, err := agent.New(cfg)
+func NewAgent(canisterId principal.Principal, httpClient http.Client, cfg agent.Config) (*Agent, error) {
+	a, err := agent.New(cfg, httpClient)
 	if err != nil {
 		return nil, err
 	}

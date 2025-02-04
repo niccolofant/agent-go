@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"reflect"
 	"time"
@@ -162,7 +163,7 @@ type Agent struct {
 }
 
 // New returns a new Agent based on the given configuration.
-func New(cfg Config) (*Agent, error) {
+func New(cfg Config, httpClient http.Client) (*Agent, error) {
 	if cfg.IngressExpiry == 0 {
 		cfg.IngressExpiry = 5 * time.Minute
 	}
@@ -181,7 +182,7 @@ func New(cfg Config) (*Agent, error) {
 	if cfg.ClientConfig != nil {
 		ccfg = *cfg.ClientConfig
 	}
-	client := NewClientWithLogger(ccfg, logger)
+	client := NewClientWithLogger(ccfg, httpClient, logger)
 	rootKey, _ := hex.DecodeString(certification.RootKey)
 	if cfg.FetchRootKey {
 		status, err := client.Status()

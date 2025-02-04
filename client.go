@@ -30,12 +30,12 @@ func NewClient(cfg ClientConfig) Client {
 }
 
 // NewClientWithLogger creates a new client based on the given configuration and logger.
-func NewClientWithLogger(cfg ClientConfig, logger Logger) Client {
+func NewClientWithLogger(cfg ClientConfig, httpClient http.Client, logger Logger) Client {
 	if logger == nil {
 		logger = new(NoopLogger)
 	}
 	return Client{
-		client: http.Client{},
+		client: httpClient,
 		config: cfg,
 		logger: logger,
 	}
@@ -52,6 +52,8 @@ func (c Client) Call(ctx context.Context, canisterID principal.Principal, data [
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
+
 	switch resp.StatusCode {
 	case http.StatusAccepted:
 		return io.ReadAll(resp.Body)
@@ -119,6 +121,7 @@ func (c Client) post(ctx context.Context, path string, canisterID principal.Prin
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return io.ReadAll(resp.Body)
