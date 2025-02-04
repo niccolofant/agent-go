@@ -3,12 +3,13 @@ package agent
 import (
 	"bytes"
 	"crypto/sha256"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
-	"github.com/aviate-labs/agent-go/identity"
-	"github.com/aviate-labs/agent-go/principal"
-	"github.com/aviate-labs/leb128"
 	"math/big"
 	"sort"
+
+	"github.com/aviate-labs/leb128"
+	"github.com/niccolofant/agent-go/certification/hashtree"
+	"github.com/niccolofant/agent-go/identity"
+	"github.com/niccolofant/agent-go/principal"
 
 	"github.com/fxamacker/cbor/v2"
 )

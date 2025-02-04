@@ -2,8 +2,9 @@ package identity
 
 import (
 	"crypto/elliptic"
-	"github.com/aviate-labs/agent-go/principal"
 	"math/big"
+
+	"github.com/niccolofant/agent-go/principal"
 )
 
 func marshal(curve elliptic.Curve, x, y *big.Int) []byte {

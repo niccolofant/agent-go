@@ -2,11 +2,12 @@ package registry
 
 import (
 	"fmt"
-	"github.com/aviate-labs/agent-go/certification"
-	v1 "github.com/aviate-labs/agent-go/clients/registry/proto/v1"
-	"github.com/aviate-labs/agent-go/principal"
-	"google.golang.org/protobuf/proto"
 	"strings"
+
+	"github.com/niccolofant/agent-go/certification"
+	v1 "github.com/niccolofant/agent-go/clients/registry/proto/v1"
+	"github.com/niccolofant/agent-go/principal"
+	"google.golang.org/protobuf/proto"
 )
 
 type Client struct {

@@ -5,9 +5,10 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/aviate-labs/agent-go/principal"
 	"hash/crc32"
 	"strings"
+
+	"github.com/niccolofant/agent-go/principal"
 )
 
 var encoding = base32.StdEncoding.WithPadding(base32.NoPadding)

@@ -7,10 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/aviate-labs/agent-go/certification"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
-	"github.com/aviate-labs/agent-go/principal"
+
 	"github.com/fxamacker/cbor/v2"
+	"github.com/niccolofant/agent-go/certification"
+	"github.com/niccolofant/agent-go/certification/hashtree"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 type BEHexUint64 uint64

@@ -1,9 +1,10 @@
 package registry_test
 
 import (
-	"github.com/aviate-labs/agent-go/clients/registry"
 	"os"
 	"testing"
+
+	"github.com/niccolofant/agent-go/clients/registry"
 )
 
 func TestClient_GetNodeListSince(t *testing.T) {

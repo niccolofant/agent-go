@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"github.com/aviate-labs/leb128"
+	"github.com/niccolofant/agent-go/candid/idl"
 )
 
 func Encode(argumentTypes []idl.Type, arguments []any) ([]byte, error) {

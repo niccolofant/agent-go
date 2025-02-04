@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"net/http"
 
-	"github.com/aviate-labs/agent-go"
-	"github.com/aviate-labs/agent-go/certification"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
-	v1 "github.com/aviate-labs/agent-go/clients/registry/proto/v1"
-	"github.com/aviate-labs/agent-go/principal"
 	"github.com/aviate-labs/leb128"
 	"github.com/fxamacker/cbor/v2"
+	"github.com/niccolofant/agent-go"
+	"github.com/niccolofant/agent-go/certification"
+	"github.com/niccolofant/agent-go/certification/hashtree"
+	v1 "github.com/niccolofant/agent-go/clients/registry/proto/v1"
+	"github.com/niccolofant/agent-go/principal"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -23,7 +24,7 @@ type DataProvider struct {
 }
 
 func NewDataProvider() (*DataProvider, error) {
-	a, err := agent.New(agent.DefaultConfig)
+	a, err := agent.New(agent.DefaultConfig, http.Client{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}

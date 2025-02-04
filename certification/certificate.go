@@ -5,12 +5,13 @@ import (
 	"crypto/ed25519"
 	"encoding/asn1"
 	"fmt"
-	"github.com/aviate-labs/agent-go/certification/bls"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
-	"github.com/aviate-labs/agent-go/principal"
-	"github.com/aviate-labs/leb128"
 	"slices"
 	"time"
+
+	"github.com/aviate-labs/leb128"
+	"github.com/niccolofant/agent-go/certification/bls"
+	"github.com/niccolofant/agent-go/certification/hashtree"
+	"github.com/niccolofant/agent-go/principal"
 
 	"github.com/fxamacker/cbor/v2"
 )

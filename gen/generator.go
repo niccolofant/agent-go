@@ -9,7 +9,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/aviate-labs/agent-go/candid/did"
+	"github.com/niccolofant/agent-go/candid/did"
 )
 
 const (

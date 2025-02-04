@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 
-	"github.com/aviate-labs/agent-go"
-	"github.com/aviate-labs/agent-go/cmd/goic/internal/cmd"
-	"github.com/aviate-labs/agent-go/gen"
-	"github.com/aviate-labs/agent-go/principal"
+	"github.com/niccolofant/agent-go"
+	"github.com/niccolofant/agent-go/cmd/goic/internal/cmd"
+	"github.com/niccolofant/agent-go/gen"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 var root = cmd.NewCommandFork(
@@ -146,7 +147,7 @@ var root = cmd.NewCommandFork(
 )
 
 func fetchDID(canisterId principal.Principal) ([]byte, error) {
-	a, err := agent.New(agent.Config{})
+	a, err := agent.New(agent.Config{}, http.Client{})
 	if err != nil {
 		return nil, err
 	}

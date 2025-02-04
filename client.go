@@ -9,8 +9,8 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/aviate-labs/agent-go/principal"
 	"github.com/fxamacker/cbor/v2"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 // Client is a client for the IC agent.
@@ -21,9 +21,9 @@ type Client struct {
 }
 
 // NewClient creates a new client based on the given configuration.
-func NewClient(cfg ClientConfig) Client {
+func NewClient(cfg ClientConfig, httpClient http.Client, ) Client {
 	return Client{
-		client: http.Client{},
+		client: httpClient,
 		config: cfg,
 		logger: new(NoopLogger),
 	}

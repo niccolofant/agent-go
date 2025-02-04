@@ -1,13 +1,15 @@
 package agent
 
 import (
-	"github.com/aviate-labs/agent-go/certification"
-	"github.com/aviate-labs/agent-go/principal"
+	"net/http"
 	"testing"
+
+	"github.com/niccolofant/agent-go/certification"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 func TestAgent_GetSubnetMetrics(t *testing.T) {
-	a, err := New(DefaultConfig)
+	a, err := New(DefaultConfig, http.Client{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -17,7 +19,7 @@ func TestAgent_GetSubnetMetrics(t *testing.T) {
 }
 
 func TestAgent_GetSubnets(t *testing.T) {
-	a, err := New(DefaultConfig)
+	a, err := New(DefaultConfig, http.Client{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +29,7 @@ func TestAgent_GetSubnets(t *testing.T) {
 }
 
 func TestAgent_GetSubnetsInfo(t *testing.T) {
-	a, err := New(DefaultConfig)
+	a, err := New(DefaultConfig, http.Client{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,13 +3,14 @@ package agent_test
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"testing"
 
-	"github.com/aviate-labs/agent-go"
-	"github.com/aviate-labs/agent-go/candid/idl"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
-	"github.com/aviate-labs/agent-go/identity"
-	"github.com/aviate-labs/agent-go/principal"
+	"github.com/niccolofant/agent-go"
+	"github.com/niccolofant/agent-go/candid/idl"
+	"github.com/niccolofant/agent-go/certification/hashtree"
+	"github.com/niccolofant/agent-go/identity"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 var (
@@ -20,7 +21,7 @@ var (
 var _ = new(testLogger)
 
 func Example_anonymous_query() {
-	a, _ := agent.New(agent.DefaultConfig)
+	a, _ := agent.New(agent.DefaultConfig, http.Client{})
 	type Account struct {
 		Account string `ic:"account"`
 	}
@@ -44,7 +45,7 @@ func Example_json() {
 	_ = json.Unmarshal([]byte(raw), &balance)
 	fmt.Println(balance.E8S)
 
-	a, _ := agent.New(agent.DefaultConfig)
+	a, _ := agent.New(agent.DefaultConfig, http.Client{})
 	if err := a.Query(LEDGER_PRINCIPAL, "account_balance_dfx", []any{struct {
 		Account string `json:"account"`
 	}{
@@ -62,7 +63,7 @@ func Example_json() {
 func Example_query_ed25519() {
 	id, _ := identity.NewRandomEd25519Identity()
 	ledgerID := principal.MustDecode("ryjl3-tyaaa-aaaaa-aaaba-cai")
-	a, _ := agent.New(agent.Config{Identity: id})
+	a, _ := agent.New(agent.Config{Identity: id}, http.Client{})
 	var balance struct {
 		E8S uint64 `ic:"e8s"`
 	}
@@ -77,7 +78,7 @@ func Example_query_ed25519() {
 func Example_query_prime256v1() {
 	id, _ := identity.NewRandomPrime256v1Identity()
 	ledgerID := principal.MustDecode("ryjl3-tyaaa-aaaaa-aaaba-cai")
-	a, _ := agent.New(agent.Config{Identity: id})
+	a, _ := agent.New(agent.Config{Identity: id}, http.Client{})
 	var balance struct {
 		E8S uint64 `ic:"e8s"`
 	}
@@ -92,7 +93,7 @@ func Example_query_prime256v1() {
 func Example_query_secp256k1() {
 	id, _ := identity.NewRandomSecp256k1Identity()
 	ledgerID := principal.MustDecode("ryjl3-tyaaa-aaaaa-aaaba-cai")
-	a, _ := agent.New(agent.Config{Identity: id})
+	a, _ := agent.New(agent.Config{Identity: id}, http.Client{})
 	var balance struct {
 		E8S uint64 `ic:"e8s"`
 	}
@@ -105,7 +106,7 @@ func Example_query_secp256k1() {
 }
 
 func TestAgent_Call(t *testing.T) {
-	a, err := agent.New(agent.DefaultConfig)
+	a, err := agent.New(agent.DefaultConfig, http.Client{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestAgent_Query_Ed25519(t *testing.T) {
 	}
 	a, _ := agent.New(agent.Config{
 		Identity: id,
-	})
+	}, http.Client{})
 	type Account struct {
 		Account string `ic:"account"`
 	}
@@ -149,7 +150,7 @@ func TestAgent_Query_Secp256k1(t *testing.T) {
 	}
 	a, _ := agent.New(agent.Config{
 		Identity: id,
-	})
+	}, http.Client{})
 	type Account struct {
 		Account string `ic:"account"`
 	}
@@ -164,7 +165,7 @@ func TestAgent_Query_Secp256k1(t *testing.T) {
 }
 
 func TestAgent_Query_callback(t *testing.T) {
-	a, err := agent.New(agent.DefaultConfig)
+	a, err := agent.New(agent.DefaultConfig, http.Client{})
 	if err != nil {
 		t.Fatal(err)
 	}

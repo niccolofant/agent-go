@@ -2,10 +2,11 @@ package ledger
 
 import (
 	"fmt"
+	"net/http"
 
-	"github.com/aviate-labs/agent-go"
-	v1 "github.com/aviate-labs/agent-go/clients/ledger/proto/v1"
-	"github.com/aviate-labs/agent-go/principal"
+	"github.com/niccolofant/agent-go"
+	v1 "github.com/niccolofant/agent-go/clients/ledger/proto/v1"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 const MaxBlocksPerRequest = 2000
@@ -19,7 +20,7 @@ type DataProvider struct {
 }
 
 func NewDataProvider() (*DataProvider, error) {
-	a, err := agent.New(agent.DefaultConfig)
+	a, err := agent.New(agent.DefaultConfig, http.Client{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create agent: %w", err)
 	}

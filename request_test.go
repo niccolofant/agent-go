@@ -2,13 +2,14 @@ package agent_test
 
 import (
 	"fmt"
-	"github.com/fxamacker/cbor/v2"
 	"testing"
 	"time"
 
-	"github.com/aviate-labs/agent-go"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
-	"github.com/aviate-labs/agent-go/principal"
+	"github.com/fxamacker/cbor/v2"
+
+	"github.com/niccolofant/agent-go"
+	"github.com/niccolofant/agent-go/certification/hashtree"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 func TestNewRequestID(t *testing.T) {

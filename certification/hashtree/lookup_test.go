@@ -3,8 +3,9 @@ package hashtree_test
 import (
 	"bytes"
 	"errors"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
 	"testing"
+
+	"github.com/niccolofant/agent-go/certification/hashtree"
 )
 
 func TestHashTree_Lookup_absent(t *testing.T) {

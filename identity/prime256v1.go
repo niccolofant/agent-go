@@ -9,8 +9,9 @@ import (
 	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
-	"github.com/aviate-labs/agent-go/principal"
 	"math/big"
+
+	"github.com/niccolofant/agent-go/principal"
 )
 
 var prime256v1OID = asn1.ObjectIdentifier{1, 2, 840, 10045, 3, 1, 7}

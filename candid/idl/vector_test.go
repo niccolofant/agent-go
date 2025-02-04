@@ -2,8 +2,9 @@ package idl_test
 
 import (
 	"errors"
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/niccolofant/agent-go/candid/idl"
 )
 
 func ExampleVectorType() {

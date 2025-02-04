@@ -3,8 +3,9 @@ package ii
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/aviate-labs/agent-go/principal"
 	"testing"
+
+	"github.com/niccolofant/agent-go/principal"
 )
 
 var (

@@ -1,8 +1,9 @@
 package idl_test
 
 import (
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/niccolofant/agent-go/candid/idl"
 )
 
 func ExampleText() {

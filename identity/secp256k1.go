@@ -6,10 +6,11 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/aviate-labs/agent-go/principal"
-	"github.com/aviate-labs/secp256k1"
 	"math/big"
 	"slices"
+
+	"github.com/aviate-labs/secp256k1"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 var ecPublicKeyOID = asn1.ObjectIdentifier{1, 2, 840, 10045, 2, 1}

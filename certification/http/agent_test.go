@@ -2,17 +2,18 @@ package http_test
 
 import (
 	"fmt"
+	nethttp "net/http"
 	"testing"
 
-	"github.com/aviate-labs/agent-go"
-	"github.com/aviate-labs/agent-go/certification/http"
-	"github.com/aviate-labs/agent-go/certification/http/certexp"
-	"github.com/aviate-labs/agent-go/principal"
+	"github.com/niccolofant/agent-go"
+	"github.com/niccolofant/agent-go/certification/http"
+	"github.com/niccolofant/agent-go/certification/http/certexp"
+	"github.com/niccolofant/agent-go/principal"
 )
 
 func TestAgent_HttpRequest(t *testing.T) {
 	canisterId := principal.MustDecode("rdmx6-jaaaa-aaaaa-aaadq-cai")
-	a, err := http.NewAgent(canisterId, agent.DefaultConfig)
+	a, err := http.NewAgent(canisterId, nethttp.Client{}, agent.DefaultConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func TestCalculateRequestHash(t *testing.T) {
 
 func TestResponse_Verify_V1(t *testing.T) {
 	canisterId := principal.MustDecode("rdmx6-jaaaa-aaaaa-aaadq-cai")
-	a, err := http.NewAgent(canisterId, agent.DefaultConfig)
+	a, err := http.NewAgent(canisterId, nethttp.Client{}, agent.DefaultConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +99,7 @@ func TestResponse_Verify_V1(t *testing.T) {
 
 func TestResponse_Verify_V2(t *testing.T) {
 	canisterId := principal.MustDecode("rdmx6-jaaaa-aaaaa-aaadq-cai")
-	a, err := http.NewAgent(canisterId, agent.DefaultConfig)
+	a, err := http.NewAgent(canisterId, nethttp.Client{}, agent.DefaultConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
