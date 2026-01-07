@@ -53,14 +53,14 @@ func CalculateRequestHash(r *Request, reqCert *certexp.CertificateExpressionRequ
 		params = certifiedParams
 	}
 	if len(params) > 0 {
-		var query string
+		var query strings.Builder
 		for i, param := range params {
 			if i != 0 {
-				query += "&"
+				query.WriteString("&")
 			}
-			query += fmt.Sprintf("%s=%s", url.QueryEscape(param.k), url.QueryEscape(param.v))
+			query.WriteString(fmt.Sprintf("%s=%s", url.QueryEscape(param.k), url.QueryEscape(param.v)))
 		}
-		m[":ic-cert-query"] = sha256.Sum256([]byte(query))
+		m[":ic-cert-query"] = sha256.Sum256([]byte(query.String()))
 	}
 
 	requestHeaderHash, err := hashMap(m)

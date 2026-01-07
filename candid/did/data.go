@@ -194,11 +194,12 @@ func (p Principal) data() {}
 type Record []Field
 
 func (r Record) String() string {
-	s := "record {\n"
+	var s strings.Builder
+	s.WriteString("record {\n")
 	for _, f := range r {
-		s += fmt.Sprintf("  %s;\n", f.String())
+		s.WriteString(fmt.Sprintf("  %s;\n", f.String()))
 	}
-	return s + "}"
+	return s.String() + "}"
 }
 
 func (r Record) data() {}
@@ -209,11 +210,12 @@ func (a Service) data() {}
 type Variant []Field
 
 func (v Variant) String() string {
-	s := "variant {\n"
+	var s strings.Builder
+	s.WriteString("variant {\n")
 	for _, f := range v {
-		s += fmt.Sprintf("  %s;\n", f.String())
+		s.WriteString(fmt.Sprintf("  %s;\n", f.String()))
 	}
-	return s + "}"
+	return s.String() + "}"
 }
 
 func (v Variant) data() {}

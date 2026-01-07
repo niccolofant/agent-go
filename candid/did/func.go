@@ -111,12 +111,13 @@ func (t Tuple) String() string {
 		}
 		return s
 	}
-	s := "("
+	var s strings.Builder
+	s.WriteString("(")
 	for i, a := range t {
-		s += a.String()
+		s.WriteString(a.String())
 		if i != len(t)-1 {
-			s += ", "
+			s.WriteString(", ")
 		}
 	}
-	return s + ")"
+	return s.String() + ")"
 }

@@ -262,7 +262,7 @@ func (g *Generator) dataToString(prefix string, data did.Data) string {
 				typ:          typ,
 			})
 		}
-		var record string
+		var record strings.Builder
 		for _, r := range records {
 			tag := r.originalName
 			var tupleTag string
@@ -273,9 +273,9 @@ func (g *Generator) dataToString(prefix string, data did.Data) string {
 			if strings.HasPrefix(r.typ, "*") {
 				tag += ",omitempty" // optional value.
 			}
-			record += fmt.Sprintf("\t%-*s %-*s `ic:\"%s%s\" json:\"%s\"`\n", sizeName, r.name, sizeType, r.typ, tag, tupleTag, tag)
+			record.WriteString(fmt.Sprintf("\t%-*s %-*s `ic:\"%s%s\" json:\"%s\"`\n", sizeName, r.name, sizeType, r.typ, tag, tupleTag, tag))
 		}
-		return fmt.Sprintf("struct {\n%s}", record)
+		return fmt.Sprintf("struct {\n%s}", record.String())
 	case did.Variant:
 		var sizeName int
 		var sizeType int
@@ -326,11 +326,11 @@ func (g *Generator) dataToString(prefix string, data did.Data) string {
 				})
 			}
 		}
-		var record string
+		var record strings.Builder
 		for _, r := range records {
-			record += fmt.Sprintf("\t%-*s *%-*s `ic:\"%s,variant\" json:\"%s,omitempty\"`\n", sizeName, r.name, sizeType, r.typ, r.originalName, r.originalName)
+			record.WriteString(fmt.Sprintf("\t%-*s *%-*s `ic:\"%s,variant\" json:\"%s,omitempty\"`\n", sizeName, r.name, sizeType, r.typ, r.originalName, r.originalName))
 		}
-		return fmt.Sprintf("struct {\n%s}", record)
+		return fmt.Sprintf("struct {\n%s}", record.String())
 	case did.Vector:
 		return fmt.Sprintf("[]%s", g.dataToString(prefix, t.Data))
 	default:

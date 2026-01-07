@@ -79,14 +79,14 @@ func (p Principal) Encode() string {
 	cs := make([]byte, 4)
 	binary.BigEndian.PutUint32(cs, crc32.ChecksumIEEE(p.Raw))
 	b32 := strings.ToLower(encoding.EncodeToString(append(cs, p.Raw...)))
-	var str string
+	var str strings.Builder
 	for i, c := range b32 {
 		if i != 0 && i%5 == 0 {
-			str += "-"
+			str.WriteString("-")
 		}
-		str += string(c)
+		str.WriteString(string(c))
 	}
-	return str
+	return str.String()
 }
 
 // Equal checks if two principals are equal.

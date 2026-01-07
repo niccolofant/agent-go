@@ -11,7 +11,7 @@ func TestParseTags(t *testing.T) {
 		type custom struct {
 			Name string
 		}
-		field := reflect.TypeOf(custom{}).Field(0)
+		field := reflect.TypeFor[custom]().Field(0)
 		tag := ParseTags(field)
 		if tag.Name != "name" {
 			t.Errorf("got %q, want %q", tag.Name, "name")
@@ -22,7 +22,7 @@ func TestParseTags(t *testing.T) {
 		type custom struct {
 			Name string `ic:"anotherName"`
 		}
-		field := reflect.TypeOf(custom{}).Field(0)
+		field := reflect.TypeFor[custom]().Field(0)
 		tag := ParseTags(field)
 		if tag.Name != "anotherName" {
 			t.Errorf("got %q, want %q", tag.Name, "name")
@@ -52,7 +52,7 @@ func TestParseTags(t *testing.T) {
 			field := reflect.StructField{
 				Name: "Name",
 				Tag:  reflect.StructTag("ic:" + test.ic),
-				Type: reflect.TypeOf(""),
+				Type: reflect.TypeFor[string](),
 			}
 			tag := ParseTags(field)
 			if test.ic != "" && tag.Name != strings.Split(test.ic, ",")[0] {
