@@ -23,7 +23,7 @@ func encodeTypes(ts []Type, tdt *TypeDefinitionTable) ([]byte, error) {
 		}
 		vs = append(vs, v...)
 	}
-	return concat(l, vs), nil
+	return append(l, vs...), nil
 }
 
 type Function struct {
@@ -95,15 +95,13 @@ func (f FunctionType) AddTypeDefinition(tdt *TypeDefinitionTable) error {
 }
 
 func (f FunctionType) Decode(r *bytes.Reader) (any, error) {
-	{
-		bs := make([]byte, 2)
-		n, err := r.Read(bs)
-		if err != nil {
-			return nil, err
-		}
-		if n != 2 || bs[0] != 0x01 || bs[1] != 0x01 {
-			return nil, fmt.Errorf("invalid func reference: %d", bs)
-		}
+	bs := make([]byte, 2)
+	n, err := r.Read(bs)
+	if err != nil {
+		return nil, err
+	}
+	if n != 2 || bs[0] != 0x01 || bs[1] != 0x01 {
+		return nil, fmt.Errorf("invalid func reference: %d", bs)
 	}
 	l, err := leb128.DecodeUnsigned(r)
 	if err != nil {
@@ -161,6 +159,54 @@ func (f FunctionType) EncodeValue(v any) ([]byte, error) {
 		return nil, err
 	}
 	return concat([]byte{0x01, 0x01}, l, pm.Principal.Raw, lm, []byte(pm.Method)), nil
+}
+
+func (f FunctionType) Read(r *bytes.Reader) ([]byte, error) {
+	bs := make([]byte, 2)
+	n, err := r.Read(bs)
+	if err != nil {
+		return nil, err
+	}
+	if n != 2 || bs[0] != 0x01 || bs[1] != 0x01 {
+		return nil, fmt.Errorf("invalid func reference: %d", bs)
+	}
+	raw, err := readLEB128(r)
+	if err != nil {
+		return nil, err
+	}
+	l, err := leb128.DecodeUnsigned(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	pid := make([]byte, l.Int64())
+	{
+		n, err := r.Read(pid)
+		if err != nil {
+			return nil, err
+		}
+		if n != int(l.Int64()) {
+			return nil, fmt.Errorf("invalid principal id: %s", principal.Principal{Raw: pid})
+		}
+	}
+	rawl, err := readLEB128(r)
+	if err != nil {
+		return nil, err
+	}
+	ml, err := leb128.DecodeUnsigned(bytes.NewReader(rawl))
+	if err != nil {
+		return nil, err
+	}
+	m := make([]byte, ml.Int64())
+	{
+		n, err := r.Read(m)
+		if err != nil {
+			return nil, err
+		}
+		if n != int(ml.Int64()) {
+			return nil, fmt.Errorf("invalid method: %s", m)
+		}
+	}
+	return concat(bs, raw, pid, rawl, m), nil
 }
 
 func (f FunctionType) String() string {

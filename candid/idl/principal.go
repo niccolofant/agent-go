@@ -51,6 +51,32 @@ func (PrincipalType) EncodeValue(v any) ([]byte, error) {
 	return concat([]byte{0x01}, l, v_.Raw), nil
 }
 
+func (PrincipalType) Read(r *bytes.Reader) ([]byte, error) {
+	b, err := r.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	if b != 0x01 {
+		return nil, fmt.Errorf("cannot decode principal")
+	}
+	raw, err := readLEB128(r)
+	if err != nil {
+		return nil, err
+	}
+	l, err := leb128.DecodeUnsigned(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	if l.Uint64() == 0 {
+		return append([]byte{b}, raw...), nil
+	}
+	bs := make([]byte, 1+len(raw)+int(l.Uint64()))
+	if _, err := r.Read(bs[len(raw)+2:]); err != nil {
+		return nil, err
+	}
+	return bs, nil
+}
+
 func (PrincipalType) String() string {
 	return "principal"
 }

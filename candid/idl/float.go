@@ -133,6 +133,33 @@ func (f FloatType) EncodeValue(v any) ([]byte, error) {
 	}
 }
 
+func (f FloatType) Read(r *bytes.Reader) ([]byte, error) {
+	switch f.size {
+	case 4:
+		bs := make([]byte, f.size)
+		n, err := r.Read(bs)
+		if err != nil {
+			return nil, err
+		}
+		if uint8(n) != f.size {
+			return nil, fmt.Errorf("float32: too short")
+		}
+		return bs, nil
+	case 8:
+		bs := make([]byte, f.size)
+		n, err := r.Read(bs)
+		if err != nil {
+			return nil, err
+		}
+		if uint8(n) != f.size {
+			return nil, fmt.Errorf("float64: too short")
+		}
+		return bs, nil
+	default:
+		return nil, fmt.Errorf("invalid float type with size %d", f.size)
+	}
+}
+
 // String returns the string representation of the type.
 func (f FloatType) String() string {
 	return fmt.Sprintf("float%d", f.size*8)

@@ -32,7 +32,7 @@ func (vec VectorType) AddTypeDefinition(tdt *TypeDefinitionTable) error {
 	if err != nil {
 		return err
 	}
-	tdt.Add(vec, concat(id, v_))
+	tdt.Add(vec, append(id, v_...))
 	return nil
 }
 
@@ -84,7 +84,27 @@ func (vec VectorType) EncodeValue(v any) ([]byte, error) {
 		}
 		vs = append(vs, v_...)
 	}
-	return concat(l, vs), nil
+	return append(l, vs...), nil
+}
+
+func (vec VectorType) Read(r *bytes.Reader) ([]byte, error) {
+	raw, err := readLEB128(r)
+	if err != nil {
+		return nil, err
+	}
+	l, err := leb128.DecodeUnsigned(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	var bs []byte
+	for i := 0; i < int(l.Int64()); i++ {
+		b, err := vec.Type.Read(r)
+		if err != nil {
+			return nil, err
+		}
+		bs = append(bs, b...)
+	}
+	return append(raw, bs...), nil
 }
 
 func (vec VectorType) String() string {
@@ -132,12 +152,12 @@ func (vec VectorType) UnmarshalGo(raw any, _v any) error {
 		rv := rv.Index(i).Interface()
 		if i < v.Len() {
 			// Reuse existing element.
-			if err := vec.Type.UnmarshalGo(rv, v.Index(i).Addr().Interface()); err != nil {
+			if err := UnmarshalGo(vec.Type, rv, v.Index(i).Addr().Interface()); err != nil {
 				return err
 			}
 		} else {
 			n := reflect.New(v.Type().Elem()) // Create new element.
-			if err := vec.Type.UnmarshalGo(rv, n.Interface()); err != nil {
+			if err := UnmarshalGo(vec.Type, rv, n.Interface()); err != nil {
 				return err
 			}
 			// Append new element.

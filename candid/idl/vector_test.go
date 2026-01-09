@@ -2,8 +2,9 @@ package idl_test
 
 import (
 	"errors"
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleVectorType() {
@@ -28,27 +29,27 @@ func TestVectorType_UnmarshalGo(t *testing.T) {
 	}
 	t.Run("slice", func(t *testing.T) {
 		var nv = []idl.Null{{}}
-		if err := (idl.VectorType{
+		if err := idl.UnmarshalGo(idl.VectorType{
 			Type: idl.NullType{},
-		}).UnmarshalGo(nil, &nv); err != nil {
+		}, nil, &nv); err != nil {
 			t.Fatal(err)
 		}
 		if len(nv) != 0 {
 			t.Error(nv)
 		}
 
-		if err := (idl.VectorType{
+		if err := idl.UnmarshalGo(idl.VectorType{
 			Type: idl.NullType{},
-		}).UnmarshalGo([]any{idl.Null{}, nil}, &nv); err != nil {
+		}, []any{idl.Null{}, nil}, &nv); err != nil {
 			t.Fatal(err)
 		}
 		if len(nv) != 2 {
 			t.Error(nv)
 		}
 
-		if err := (idl.VectorType{
+		if err := idl.UnmarshalGo(idl.VectorType{
 			Type: idl.NullType{},
-		}).UnmarshalGo([1]idl.Null{{}}, &nv); err != nil {
+		}, [1]idl.Null{{}}, &nv); err != nil {
 			t.Fatal(err)
 		}
 		if len(nv) != 1 {
@@ -56,37 +57,37 @@ func TestVectorType_UnmarshalGo(t *testing.T) {
 		}
 
 		var a any
-		expectErr(t, (idl.VectorType{
+		expectErr(t, idl.UnmarshalGo(idl.VectorType{
 			Type: idl.NullType{},
-		}).UnmarshalGo(true, &a))
+		}, true, &a))
 	})
 	t.Run("array", func(t *testing.T) {
 		var nv = [1]idl.Int{}
-		if err := (idl.VectorType{
+		if err := idl.UnmarshalGo(idl.VectorType{
 			Type: idl.IntType{},
-		}).UnmarshalGo(nil, &nv); err != nil {
+		}, nil, &nv); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := (idl.VectorType{
+		if err := idl.UnmarshalGo(idl.VectorType{
 			Type: idl.IntType{},
-		}).UnmarshalGo([]any{0}, &nv); err != nil {
+		}, []any{0}, &nv); err != nil {
 			t.Fatal(err)
 		}
 
-		if err := (idl.VectorType{
+		if err := idl.UnmarshalGo(idl.VectorType{
 			Type: idl.IntType{},
-		}).UnmarshalGo([1]idl.Int{idl.NewInt(0)}, &nv); err != nil {
+		}, [1]idl.Int{idl.NewInt(0)}, &nv); err != nil {
 			t.Fatal(err)
 		}
 
-		expectErr(t, (idl.VectorType{
+		expectErr(t, idl.UnmarshalGo(idl.VectorType{
 			Type: idl.IntType{},
-		}).UnmarshalGo([]any{}, &nv))
+		}, []any{}, &nv))
 
-		expectErr(t, (idl.VectorType{
+		expectErr(t, idl.UnmarshalGo(idl.VectorType{
 			Type: idl.IntType{},
-		}).UnmarshalGo([2]any{}, &nv))
+		}, [2]any{}, &nv))
 	})
 }
 
@@ -95,7 +96,7 @@ func TestVectorType_empty(t *testing.T) {
 
 	var x []byte
 	t.Run("non-nil", func(t *testing.T) {
-		if err := typ.UnmarshalGo([]byte{}, &x); err != nil {
+		if err := idl.UnmarshalGo(typ, []byte{}, &x); err != nil {
 			t.Fatal(err)
 		}
 		if x == nil {
@@ -103,7 +104,7 @@ func TestVectorType_empty(t *testing.T) {
 		}
 	})
 	t.Run("nil", func(t *testing.T) {
-		if err := typ.UnmarshalGo(nil, &x); err != nil {
+		if err := idl.UnmarshalGo(typ, nil, &x); err != nil {
 			t.Fatal(err)
 		}
 		if x != nil {

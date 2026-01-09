@@ -79,7 +79,7 @@ func (variant VariantType) AddTypeDefinition(tdt *TypeDefinitionTable) error {
 		if err != nil {
 			return nil
 		}
-		vs = append(vs, concat(id, t)...)
+		vs = concat(vs, id, t)
 	}
 
 	tdt.Add(variant, concat(id, l, vs))
@@ -133,10 +133,30 @@ func (variant VariantType) EncodeValue(value any) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			return concat(id, v_), nil
+			return append(id, v_...), nil
 		}
 	}
 	return nil, fmt.Errorf("unknown variant: %v", value)
+}
+
+func (variant VariantType) Read(r *bytes.Reader) ([]byte, error) {
+	raw, err := readLEB128(r)
+	if err != nil {
+		return nil, err
+	}
+	id, err := leb128.DecodeUnsigned(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	if id.Cmp(big.NewInt(int64(len(variant.Fields)))) >= 0 {
+		return nil, fmt.Errorf("invalid variant index: %v", id)
+	}
+	f := variant.Fields[int(id.Int64())]
+	bs, err := f.Type.Read(r)
+	if err != nil {
+		return nil, err
+	}
+	return append(raw, bs...), nil
 }
 
 func (variant VariantType) String() string {
@@ -241,7 +261,7 @@ func (variant VariantType) unmarshalMap(name string, value any, _v *map[string]a
 		}
 
 		r := reflect.New(reflect.ValueOf(v).Type()).Elem()
-		if err := f.Type.UnmarshalGo(value, r.Addr().Interface()); err != nil {
+		if err := UnmarshalGo(f.Type, value, r.Addr().Interface()); err != nil {
 			return err
 		}
 		*_v = map[string]any{
@@ -276,7 +296,7 @@ func (variant VariantType) unmarshalStruct(name string, value any, _v reflect.Va
 			// Allocate a new value if the pointer is nil.
 			v.Set(reflect.New(v.Type().Elem()))
 		}
-		return f.Type.UnmarshalGo(value, v.Interface())
+		return UnmarshalGo(f.Type, value, v.Interface())
 	}
 	return NewUnmarshalGoError(value, _v.Interface())
 }

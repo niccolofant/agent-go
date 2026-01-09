@@ -227,7 +227,7 @@ func (n NatType) Decode(r *bytes.Reader) (any, error) {
 	case 1:
 		return r.ReadByte()
 	default:
-		return nil, fmt.Errorf("invalid int type with size %d", n.size)
+		return nil, fmt.Errorf("invalid nat type with size %d", n.size)
 	}
 }
 
@@ -289,6 +289,51 @@ func (n NatType) EncodeValue(v any) ([]byte, error) {
 		return []byte{v}, nil
 	default:
 		return nil, NewEncodeValueError(v, NatOpCode)
+	}
+}
+
+func (n NatType) Read(r *bytes.Reader) ([]byte, error) {
+	switch n.size {
+	case 0:
+		return readLEB128(r)
+	case 8:
+		bs := make([]byte, 8)
+		n, err := r.Read(bs)
+		if err != nil {
+			return nil, err
+		}
+		if n != 8 {
+			return nil, fmt.Errorf("nat64: too short")
+		}
+		return bs, nil
+	case 4:
+		bs := make([]byte, 4)
+		n, err := r.Read(bs)
+		if err != nil {
+			return nil, err
+		}
+		if n != 4 {
+			return nil, fmt.Errorf("nat32: too short")
+		}
+		return bs, nil
+	case 2:
+		bs := make([]byte, 2)
+		n, err := r.Read(bs)
+		if err != nil {
+			return nil, err
+		}
+		if n != 2 {
+			return nil, fmt.Errorf("nat16: too short")
+		}
+		return bs, nil
+	case 1:
+		b, err := r.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+		return []byte{b}, nil
+	default:
+		return nil, fmt.Errorf("invalid nat type with size %d", n.size)
 	}
 }
 

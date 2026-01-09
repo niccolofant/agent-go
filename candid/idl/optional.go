@@ -39,23 +39,23 @@ func (o OptionalType) AddTypeDefinition(tdt *TypeDefinitionTable) error {
 	if err != nil {
 		return err
 	}
-	tdt.Add(o, concat(id, v))
+	tdt.Add(o, append(id, v...))
 	return nil
 }
 
 // Decode decodes the value from the given reader into either `nil` or a value (of the subtype of the optional type).
 func (o OptionalType) Decode(r *bytes.Reader) (any, error) {
-	l, err := r.ReadByte()
+	b, err := r.ReadByte()
 	if err != nil {
 		return nil, err
 	}
-	switch l {
+	switch b {
 	case 0x00:
 		return nil, nil
 	case 0x01:
 		return o.Type.Decode(r)
 	default:
-		return nil, fmt.Errorf("invalid option value: %x", l)
+		return nil, fmt.Errorf("invalid option value: %x", b)
 	}
 }
 
@@ -84,7 +84,26 @@ func (o OptionalType) EncodeValue(v any) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return concat([]byte{0x01}, v_), nil
+	return append([]byte{0x01}, v_...), nil
+}
+
+func (o OptionalType) Read(r *bytes.Reader) ([]byte, error) {
+	b, err := r.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	switch b {
+	case 0x00:
+		return []byte{b}, nil
+	case 0x01:
+		bs, err := o.Type.Read(r)
+		if err != nil {
+			return nil, err
+		}
+		return append([]byte{b}, bs...), nil
+	default:
+		return nil, fmt.Errorf("invalid option value: %x", b)
+	}
 }
 
 // String returns the string representation of the type.
@@ -104,10 +123,10 @@ func (o OptionalType) UnmarshalGo(raw any, _v any) error {
 		}
 		if !v.IsNil() {
 			// No need to allocate a new pointer.
-			return o.Type.UnmarshalGo(raw, v.Interface())
+			return UnmarshalGo(o.Type, raw, v.Interface())
 		}
 		ptr := reflect.New(v.Type().Elem()) // Create a new pointer.
-		if err := o.Type.UnmarshalGo(raw, ptr.Interface()); err != nil {
+		if err := UnmarshalGo(o.Type, raw, ptr.Interface()); err != nil {
 			return err
 		}
 		v.Set(ptr)

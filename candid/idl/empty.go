@@ -30,6 +30,10 @@ func (EmptyType) EncodeValue(_ any) ([]byte, error) {
 	return []byte{}, nil
 }
 
+func (EmptyType) Read(*bytes.Reader) ([]byte, error) {
+	return nil, fmt.Errorf("cannot read empty type")
+}
+
 // String returns the string representation of the type.
 func (EmptyType) String() string {
 	return "empty"

@@ -8,7 +8,7 @@ import (
 
 func checkIsPtr(_v any) (reflect.Value, bool) {
 	v := reflect.ValueOf(_v)
-	if v.Kind() != reflect.Ptr {
+	if v.Kind() != reflect.Pointer {
 		return v, false
 	}
 	v = v.Elem()
@@ -19,11 +19,16 @@ func checkIsPtr(_v any) (reflect.Value, bool) {
 }
 
 func concat(bs ...[]byte) []byte {
-	var c []byte
+	var l int
 	for _, b := range bs {
-		c = append(c, b...)
+		l += len(b)
 	}
-	return c
+	tmp := make([]byte, l)
+	var i int
+	for _, b := range bs {
+		i += copy(tmp[i:], b)
+	}
+	return tmp
 }
 
 func log2(n uint8) uint8 {

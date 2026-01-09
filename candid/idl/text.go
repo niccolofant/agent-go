@@ -21,10 +21,13 @@ func (TextType) Decode(r *bytes.Reader) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if n.Int64() == 0 {
+		return "", nil
+	}
 	bs := make([]byte, n.Int64())
 	i, err := r.Read(bs)
 	if err != nil {
-		return "", nil
+		return nil, err
 	}
 	if i != int(n.Int64()) {
 		return nil, io.EOF
@@ -51,6 +54,29 @@ func (TextType) EncodeValue(v any) ([]byte, error) {
 		return nil, err
 	}
 	return append(bs, []byte(v_)...), nil
+}
+
+func (TextType) Read(r *bytes.Reader) ([]byte, error) {
+	raw, err := readLEB128(r)
+	if err != nil {
+		return nil, err
+	}
+	n, err := leb128.DecodeUnsigned(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	if n.Int64() == 0 {
+		return raw, nil
+	}
+	bs := make([]byte, len(raw)+int(n.Int64()))
+	i, err := r.Read(bs[len(raw)+1:])
+	if err != nil {
+		return nil, err
+	}
+	if i != int(n.Int64()) {
+		return nil, io.EOF
+	}
+	return bs, nil
 }
 
 // String returns the string representation of the type.

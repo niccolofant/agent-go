@@ -1,8 +1,9 @@
 package idl_test
 
 import (
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleRecordType() {
@@ -61,13 +62,13 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 	}
 	t.Run("map", func(t *testing.T) {
 		var m map[string]any
-		if err := (idl.RecordType{}).UnmarshalGo(make(map[string]any), &m); err != nil {
+		if err := idl.UnmarshalGo(idl.RecordType{}, make(map[string]any), &m); err != nil {
 			t.Fatal(err)
 		}
-		if err := (idl.RecordType{}).UnmarshalGo(struct{}{}, &m); err != nil {
+		if err := idl.UnmarshalGo(idl.RecordType{}, struct{}{}, &m); err != nil {
 			t.Fatal(err)
 		}
-		if err := (idl.RecordType{}).UnmarshalGo(make(map[string]idl.Nat), &m); err != nil {
+		if err := idl.UnmarshalGo(idl.RecordType{}, make(map[string]idl.Nat), &m); err != nil {
 			t.Fatal(err)
 		}
 
@@ -84,10 +85,10 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 			},
 		}
 
-		expectErr(t, rt.UnmarshalGo(make(map[string]idl.Null), &m))
+		expectErr(t, idl.UnmarshalGo(rt, make(map[string]idl.Null), &m))
 
 		for range 3 {
-			if err := rt.UnmarshalGo(map[string]any{
+			if err := idl.UnmarshalGo(rt, map[string]any{
 				"foo": "💩",
 				"bar": idl.NewInt(42),
 			}, &m); err != nil {
@@ -102,7 +103,7 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 		}
 
 		// Nested records.
-		if err := (idl.RecordType{
+		if err := idl.UnmarshalGo(idl.RecordType{
 			Fields: []idl.FieldType{
 				{
 					Name: "foo",
@@ -116,7 +117,7 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 					},
 				},
 			},
-		}).UnmarshalGo(map[string]any{
+		}, map[string]any{
 			"foo": map[string]any{
 				"bar": idl.NewInt(42),
 			},
@@ -132,13 +133,13 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 			Foo string
 			Bar idl.Int
 		}
-		if err := (idl.RecordType{}).UnmarshalGo(make(map[string]any), &s); err != nil {
+		if err := idl.UnmarshalGo(idl.RecordType{}, make(map[string]any), &s); err != nil {
 			t.Fatal(err)
 		}
-		if err := (idl.RecordType{}).UnmarshalGo(struct{}{}, &s); err != nil {
+		if err := idl.UnmarshalGo(idl.RecordType{}, struct{}{}, &s); err != nil {
 			t.Fatal(err)
 		}
-		if err := (idl.RecordType{}).UnmarshalGo(make(map[string]idl.Nat), &s); err != nil {
+		if err := idl.UnmarshalGo(idl.RecordType{}, make(map[string]idl.Nat), &s); err != nil {
 			t.Fatal(err)
 		}
 
@@ -155,10 +156,10 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 			},
 		}
 
-		expectErr(t, rt.UnmarshalGo(make(map[string]idl.Null), &s))
+		expectErr(t, idl.UnmarshalGo(rt, make(map[string]idl.Null), &s))
 
 		for range 3 {
-			if err := rt.UnmarshalGo(map[string]any{
+			if err := idl.UnmarshalGo(rt, map[string]any{
 				"foo": "💩",
 				"bar": idl.NewInt(42),
 			}, &s); err != nil {
@@ -172,9 +173,10 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 			}
 		}
 
-		expectErr(t, (idl.RecordType{
-			Fields: []idl.FieldType{{Name: "unknown"}},
-		}).UnmarshalGo(
+		expectErr(t, idl.UnmarshalGo(
+			idl.RecordType{
+				Fields: []idl.FieldType{{Name: "unknown"}},
+			},
 			make(map[string]any), &rt,
 		))
 
@@ -196,7 +198,7 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 			Foo string
 			Bar *struct{}
 		}
-		if err := rn.UnmarshalGo(map[string]any{
+		if err := idl.UnmarshalGo(rn, map[string]any{
 			"foo": "💩",
 			"bar": nil,
 		}, &sn); err != nil {
@@ -205,7 +207,7 @@ func TestRecordType_UnmarshalGo(t *testing.T) {
 	})
 
 	var a any
-	expectErr(t, (idl.VectorType{
+	expectErr(t, idl.UnmarshalGo(idl.VectorType{
 		Type: idl.NullType{},
-	}).UnmarshalGo(true, &a))
+	}, true, &a))
 }

@@ -1,8 +1,9 @@
 package idl_test
 
 import (
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleFloat32Type() {
@@ -48,7 +49,7 @@ func TestFloatType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			float64(0), float32(1),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != float64(i) {
@@ -57,7 +58,7 @@ func TestFloatType_UnmarshalGo(t *testing.T) {
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("float32", func(t *testing.T) {
 		nt := idl.Float32Type()
@@ -66,7 +67,7 @@ func TestFloatType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			float32(0),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != float32(i) {
@@ -77,10 +78,10 @@ func TestFloatType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			float64(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 }

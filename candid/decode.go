@@ -10,6 +10,79 @@ import (
 )
 
 func Decode(bs []byte) ([]idl.Type, []any, error) {
+	ts, r, err := decodeTypes(bs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var vs []any
+	{ // M
+		for i := range ts {
+			v, err := ts[i].Decode(r)
+			if err != nil {
+				return nil, nil, err
+			}
+			vs = append(vs, v)
+		}
+	}
+
+	if r.Len() != 0 {
+		return nil, nil, fmt.Errorf("too long")
+	}
+	return ts, vs, nil
+}
+
+func Unmarshal(data []byte, values []any) error {
+	ts, r, err := decodeTypes(data)
+	if err != nil {
+		return err
+	}
+	if len(ts) != len(values) {
+		return fmt.Errorf("unequal value lengths: %d %d", len(ts), len(values))
+	}
+
+	for i, v := range values {
+		switch v := v.(type) {
+		case *idl.RawMessage:
+			bs, err := ts[i].Read(r)
+			if err != nil {
+				return err
+			}
+			*v = bs
+		default:
+			vs, err := ts[i].Decode(r)
+			if err != nil {
+				return err
+			}
+			if err := idl.UnmarshalGo(ts[i], vs, v); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func checkHeader(r *bytes.Reader) error {
+	magic := make([]byte, 4)
+	n, err := r.Read(magic)
+	if err != nil {
+		return err
+	}
+	if n < 4 {
+		return &idl.FormatError{
+			Description: "no magic bytes",
+		}
+	}
+	if !bytes.Equal(magic, []byte{'D', 'I', 'D', 'L'}) {
+		return &idl.FormatError{
+			Description: "wrong magic bytes",
+		}
+	}
+	return nil
+}
+
+func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 	if len(bs) == 0 {
 		return nil, nil, &idl.FormatError{
 			Description: "empty",
@@ -205,63 +278,7 @@ func Decode(bs []byte) ([]idl.Type, []any, error) {
 			ts = append(ts, t)
 		}
 	}
-
-	var vs []any
-	{ // M
-		for i := 0; i < int(tsl.Int64()); i++ {
-			v, err := ts[i].Decode(r)
-			if err != nil {
-				return nil, nil, err
-			}
-			vs = append(vs, v)
-		}
-	}
-
-	if r.Len() != 0 {
-		return nil, nil, fmt.Errorf("too long")
-	}
-	return ts, vs, nil
-}
-
-func Unmarshal(data []byte, values []any) error {
-	ts, vs, err := Decode(data)
-	if err != nil {
-		return err
-	}
-	if len(ts) != len(vs) {
-		return fmt.Errorf("unequal data types and value lengths: %d %d", len(ts), len(vs))
-	}
-
-	if len(vs) != len(values) {
-		return fmt.Errorf("unequal value lengths: %d %d", len(vs), len(values))
-	}
-
-	for i, v := range values {
-		if err := ts[i].UnmarshalGo(vs[i], v); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func checkHeader(r *bytes.Reader) error {
-	magic := make([]byte, 4)
-	n, err := r.Read(magic)
-	if err != nil {
-		return err
-	}
-	if n < 4 {
-		return &idl.FormatError{
-			Description: "no magic bytes",
-		}
-	}
-	if !bytes.Equal(magic, []byte{'D', 'I', 'D', 'L'}) {
-		return &idl.FormatError{
-			Description: "wrong magic bytes",
-		}
-	}
-	return nil
+	return ts, r, nil
 }
 
 type delayType struct {

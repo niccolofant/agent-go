@@ -81,17 +81,17 @@ func (record RecordType) AddTypeDefinition(tdt *TypeDefinitionTable) error {
 		if err != nil {
 			return nil
 		}
-		vs = append(vs, concat(l, t)...)
+		vs = concat(vs, l, t)
 	}
 
 	tdt.Add(record, concat(id, l, vs))
 	return nil
 }
 
-func (record RecordType) Decode(r_ *bytes.Reader) (any, error) {
+func (record RecordType) Decode(r *bytes.Reader) (any, error) {
 	rec := make(map[string]any)
 	for _, f := range record.Fields {
-		v, err := f.Type.Decode(r_)
+		v, err := f.Type.Decode(r)
 		if err != nil {
 			return nil, err
 		}
@@ -139,6 +139,18 @@ func (record RecordType) EncodeValue(v any) ([]byte, error) {
 		vs = append(vs, v_...)
 	}
 	return vs, nil
+}
+
+func (record RecordType) Read(r *bytes.Reader) ([]byte, error) {
+	var raw []byte
+	for _, f := range record.Fields {
+		bs, err := f.Type.Read(r)
+		if err != nil {
+			return nil, err
+		}
+		raw = append(raw, bs...)
+	}
+	return raw, nil
 }
 
 func (record RecordType) String() string {
@@ -197,7 +209,7 @@ func (record RecordType) unmarshalMap(raw map[string]any, _v *map[string]any) er
 		}
 
 		r := reflect.New(reflect.ValueOf(v).Type()).Elem()
-		if err := f.Type.UnmarshalGo(raw[f.Name], r.Addr().Interface()); err != nil {
+		if err := UnmarshalGo(f.Type, raw[f.Name], r.Addr().Interface()); err != nil {
 			return err
 		}
 		m[f.Name] = r.Interface()
@@ -234,7 +246,7 @@ func (record RecordType) unmarshalStruct(raw map[string]any, _v reflect.Value) e
 			}
 		}
 
-		if err := f.Type.UnmarshalGo(raw[f.Name], v.Interface()); err != nil {
+		if err := UnmarshalGo(f.Type, raw[f.Name], v.Interface()); err != nil {
 			return err
 		}
 	}

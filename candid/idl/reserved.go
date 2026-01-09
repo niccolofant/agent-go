@@ -24,6 +24,10 @@ func (ReservedType) EncodeValue(_ any) ([]byte, error) {
 	return []byte{}, nil
 }
 
+func (ReservedType) Read(*bytes.Reader) ([]byte, error) {
+	return nil, nil
+}
+
 func (ReservedType) String() string {
 	return "reserved"
 }

@@ -88,7 +88,7 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 			idl.NewNat(uint(0)),
 			uint(1), uint64(2), uint32(3), uint16(4), uint8(5),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n.BigInt().Int64() != int64(i) {
@@ -97,7 +97,7 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("nat64", func(t *testing.T) {
 		nt := idl.Nat64Type()
@@ -106,7 +106,7 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			uint64(0), uint32(1), uint16(2), uint8(3),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != uint64(i) {
@@ -117,11 +117,11 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewNat(uint(0)), uint(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("nat32", func(t *testing.T) {
 		nt := idl.Nat32Type()
@@ -130,7 +130,7 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			uint32(0), uint16(1), uint8(2),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != uint32(i) {
@@ -141,11 +141,11 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewNat(uint(0)), uint(0), uint64(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("nat16", func(t *testing.T) {
 		nt := idl.Nat16Type()
@@ -154,7 +154,7 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			uint16(0), uint8(1),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != uint16(i) {
@@ -165,11 +165,11 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewNat(uint(0)), uint(0), uint64(0), uint32(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("nat8", func(t *testing.T) {
 		nt := idl.Nat8Type()
@@ -178,7 +178,7 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			uint8(0),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != uint8(i) {
@@ -189,10 +189,10 @@ func TestNatType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewNat(uint(0)), uint(0), uint64(0), uint32(0), uint16(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 }

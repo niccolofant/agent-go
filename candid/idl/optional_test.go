@@ -2,8 +2,9 @@ package idl_test
 
 import (
 	"errors"
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleOpt() {
@@ -25,17 +26,17 @@ func ExampleOpt_blob() {
 }
 
 func TestOptionalType_UnmarshalGo(t *testing.T) {
-	if err := (idl.OptionalType{
+	if err := idl.UnmarshalGo(idl.OptionalType{
 		Type: new(idl.NullType),
-	}).UnmarshalGo(nil, new(idl.Null)); err != nil {
+	}, nil, new(idl.Null)); err != nil {
 		t.Fatal(err)
 	}
 
 	var nat *idl.Nat
 	for range 3 {
-		if err := (idl.OptionalType{
+		if err := idl.UnmarshalGo(idl.OptionalType{
 			Type: new(idl.NatType),
-		}).UnmarshalGo(uint(1), &nat); err != nil {
+		}, uint(1), &nat); err != nil {
 			t.Fatal(err)
 		}
 		if nat == nil {
@@ -47,9 +48,9 @@ func TestOptionalType_UnmarshalGo(t *testing.T) {
 	}
 
 	var a any
-	if err := (idl.OptionalType{
+	if err := idl.UnmarshalGo(idl.OptionalType{
 		Type: new(idl.NullType),
-	}).UnmarshalGo("", &a); err == nil {
+	}, "", &a); err == nil {
 		t.Fatal("expected error")
 	} else {
 		var unmarshalGoError *idl.UnmarshalGoError
@@ -60,9 +61,9 @@ func TestOptionalType_UnmarshalGo(t *testing.T) {
 
 	t.Run("Blob", func(t *testing.T) {
 		var bs *[]byte
-		if err := (idl.OptionalType{
+		if err := idl.UnmarshalGo(idl.OptionalType{
 			Type: idl.NewVectorType(idl.Nat8Type()),
-		}).UnmarshalGo([]any{byte(0x00)}, &bs); err != nil {
+		}, []any{byte(0x00)}, &bs); err != nil {
 			t.Error(err)
 		}
 	})

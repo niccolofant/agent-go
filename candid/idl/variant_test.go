@@ -1,8 +1,9 @@
 package idl_test
 
 import (
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleVariantType() {
@@ -51,17 +52,17 @@ func TestVariantType_UnmarshalGo(t *testing.T) {
 			},
 		}
 		var m map[string]any
-		if err := result.UnmarshalGo(map[string]any{"ok": "👌🏼"}, &m); err != nil {
+		if err := idl.UnmarshalGo(result, map[string]any{"ok": "👌🏼"}, &m); err != nil {
 			t.Fatal(err)
 		}
-		if err := result.UnmarshalGo(struct {
+		if err := idl.UnmarshalGo(result, struct {
 			Ok string `ic:"ok"`
 		}{
 			Ok: "👌🏼",
 		}, &m); err != nil {
 			t.Fatal(err)
 		}
-		if err := result.UnmarshalGo(map[string]string{
+		if err := idl.UnmarshalGo(result, map[string]string{
 			"ok": "👌🏼",
 		}, &m); err != nil {
 			t.Fatal(err)
@@ -87,13 +88,13 @@ func TestVariantType_UnmarshalGo(t *testing.T) {
 			Ok  *string
 			Err *string
 		}
-		if err := result.UnmarshalGo(map[string]any{"ok": "👌🏼"}, &m); err != nil {
+		if err := idl.UnmarshalGo(result, map[string]any{"ok": "👌🏼"}, &m); err != nil {
 			t.Fatal(err)
 		}
 		if *m.Ok != "👌🏼" {
 			t.Fatal("expected 👌🏼")
 		}
-		if err := result.UnmarshalGo(struct {
+		if err := idl.UnmarshalGo(result, struct {
 			Err string `ic:"err"`
 		}{
 			Err: "err",
@@ -104,7 +105,7 @@ func TestVariantType_UnmarshalGo(t *testing.T) {
 			t.Fatal("expected err")
 		}
 		ok := "🤔"
-		if err := result.UnmarshalGo(struct {
+		if err := idl.UnmarshalGo(result, struct {
 			Ok *string `ic:"ok"`
 		}{
 			Ok: &ok,
@@ -114,7 +115,7 @@ func TestVariantType_UnmarshalGo(t *testing.T) {
 		if *m.Ok != "🤔" {
 			t.Fatal("expected 🤔")
 		}
-		if err := result.UnmarshalGo(map[string]string{
+		if err := idl.UnmarshalGo(result, map[string]string{
 			"ok": "",
 		}, &m); err != nil {
 			t.Fatal(err)
@@ -123,13 +124,13 @@ func TestVariantType_UnmarshalGo(t *testing.T) {
 			t.Fatal("expected empty string")
 		}
 
-		expectErr(t, result.UnmarshalGo(map[string]any{"ok": "👍🏼"}, &struct{ Ok string }{})) // Field must be a pointer.
-		expectErr(t, result.UnmarshalGo(map[string]any{}, &m))                               // At least one field must be present.
-		expectErr(t, result.UnmarshalGo(map[string]any{"ok": "👌🏼", "err": "👎🏼"}, &m))        // Only one field can be present.
+		expectErr(t, idl.UnmarshalGo(result, map[string]any{"ok": "👍🏼"}, &struct{ Ok string }{})) // Field must be a pointer.
+		expectErr(t, idl.UnmarshalGo(result, map[string]any{}, &m))                               // At least one field must be present.
+		expectErr(t, idl.UnmarshalGo(result, map[string]any{"ok": "👌🏼", "err": "👎🏼"}, &m))        // Only one field can be present.
 	})
 
 	var a any
-	expectErr(t, (idl.VectorType{
+	expectErr(t, idl.UnmarshalGo(idl.VectorType{
 		Type: idl.NullType{},
-	}).UnmarshalGo(true, &a))
+	}, true, &a))
 }

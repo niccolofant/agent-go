@@ -1,8 +1,9 @@
 package idl_test
 
 import (
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleNull() {
@@ -15,10 +16,10 @@ func TestNullType_UnmarshalGo(t *testing.T) {
 	var nt idl.NullType
 
 	var null idl.Null
-	if err := nt.UnmarshalGo(nil, &null); err != nil {
+	if err := idl.UnmarshalGo(nt, nil, &null); err != nil {
 		t.Fatal(err)
 	}
-	if err := nt.UnmarshalGo(idl.Null{}, &null); err != nil {
+	if err := idl.UnmarshalGo(nt, idl.Null{}, &null); err != nil {
 		t.Fatal(err)
 	}
 }

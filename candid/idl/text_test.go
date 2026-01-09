@@ -1,8 +1,9 @@
 package idl_test
 
 import (
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleText() {
@@ -19,7 +20,7 @@ func TestTextType_UnmarshalGo(t *testing.T) {
 	var nt idl.TextType
 
 	var s string
-	if err := nt.UnmarshalGo("ok", &s); err != nil {
+	if err := idl.UnmarshalGo(nt, "ok", &s); err != nil {
 		t.Fatal(err)
 	}
 	if s != "ok" {
@@ -27,7 +28,7 @@ func TestTextType_UnmarshalGo(t *testing.T) {
 	}
 
 	var a any
-	if err := nt.UnmarshalGo(true, &a); err == nil {
+	if err := idl.UnmarshalGo(nt, true, &a); err == nil {
 		t.Fatal("expected error")
 	} else {
 		if _, ok := err.(*idl.UnmarshalGoError); !ok {

@@ -60,7 +60,7 @@ func (s Service) AddTypeDefinition(tdt *TypeDefinitionTable) error {
 		if err != nil {
 			return nil
 		}
-		vs = append(vs, concat(l, id, t)...)
+		vs = concat(vs, l, id, t)
 	}
 
 	tdt.Add(s, concat(id, l, vs))
@@ -111,6 +111,35 @@ func (s Service) EncodeValue(v any) ([]byte, error) {
 		return nil, err
 	}
 	return concat([]byte{0x01}, l, []byte(p.Raw)), nil
+}
+
+func (s Service) Read(r *bytes.Reader) ([]byte, error) {
+	b, err := r.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	if b != 0x01 {
+		return nil, fmt.Errorf("invalid func reference: %d", b)
+	}
+	raw, err := readLEB128(r)
+	if err != nil {
+		return nil, err
+	}
+	l, err := leb128.DecodeUnsigned(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	pid := make([]byte, l.Int64())
+	{
+		n, err := r.Read(pid)
+		if err != nil {
+			return nil, err
+		}
+		if n != int(l.Int64()) {
+			return nil, fmt.Errorf("invalid principal id: %d", pid)
+		}
+	}
+	return concat([]byte{b}, raw, pid), nil
 }
 
 func (s Service) String() string {

@@ -19,14 +19,14 @@ func TestPrincipalType_UnmarshalGo(t *testing.T) {
 	var nt idl.PrincipalType
 
 	var p principal.Principal
-	if err := nt.UnmarshalGo(principal.AnonymousID, &p); err != nil {
+	if err := idl.UnmarshalGo(nt, principal.AnonymousID, &p); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(p.Raw, principal.AnonymousID.Raw) {
 		t.Error(p)
 	}
 	var empty []byte
-	if err := nt.UnmarshalGo(empty, &p); err != nil {
+	if err := idl.UnmarshalGo(nt, empty, &p); err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(p.Raw, empty) {
@@ -34,7 +34,7 @@ func TestPrincipalType_UnmarshalGo(t *testing.T) {
 	}
 
 	var a any
-	if err := nt.UnmarshalGo(true, &a); err == nil {
+	if err := idl.UnmarshalGo(nt, true, &a); err == nil {
 		t.Fatal("expected error")
 	} else {
 		if _, ok := err.(*idl.UnmarshalGoError); !ok {

@@ -46,6 +46,19 @@ func (BoolType) EncodeValue(v any) ([]byte, error) {
 	return []byte{0x00}, nil
 }
 
+func (BoolType) Read(r *bytes.Reader) ([]byte, error) {
+	b, err := r.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+	switch b {
+	case 0x00, 0x01:
+		return []byte{b}, nil
+	default:
+		return nil, fmt.Errorf("invalid bool values: %x", b)
+	}
+}
+
 // String returns the string representation of the type.
 func (BoolType) String() string {
 	return "bool"

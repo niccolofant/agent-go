@@ -25,7 +25,11 @@ func (NullType) EncodeValue(v any) ([]byte, error) {
 	if _, ok := v.(Null); !ok && v != nil {
 		return nil, NewEncodeValueError(v, NullOpCode)
 	}
-	return []byte{}, nil
+	return nil, nil
+}
+
+func (NullType) Read(r *bytes.Reader) ([]byte, error) {
+	return nil, nil
 }
 
 func (NullType) String() string {
@@ -34,7 +38,7 @@ func (NullType) String() string {
 
 func (NullType) UnmarshalGo(raw any, _v any) error {
 	v := reflect.ValueOf(_v)
-	if v.Kind() != reflect.Ptr {
+	if v.Kind() != reflect.Pointer {
 		return NewUnmarshalGoError(raw, _v)
 	}
 	if _, ok := raw.(Null); ok || raw == nil {

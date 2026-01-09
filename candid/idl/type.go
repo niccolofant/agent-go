@@ -6,6 +6,20 @@ import (
 	"math/big"
 )
 
+func UnmarshalGo(t Type, raw any, v any) error {
+	switch v := v.(type) {
+	case *RawMessage:
+		r, err := t.EncodeValue(raw)
+		if err != nil {
+			return err
+		}
+		*v = r
+		return nil
+	default:
+		return t.UnmarshalGo(raw, v)
+	}
+}
+
 type OpCode int64
 
 var (
@@ -163,6 +177,8 @@ type Type interface {
 
 	// UnmarshalGo unmarshals the value from the go value.
 	UnmarshalGo(raw any, v any) error
+
+	Read(*bytes.Reader) ([]byte, error)
 
 	fmt.Stringer
 }

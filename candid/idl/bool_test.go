@@ -1,8 +1,9 @@
 package idl_test
 
 import (
-	"github.com/aviate-labs/agent-go/candid/idl"
 	"testing"
+
+	"github.com/aviate-labs/agent-go/candid/idl"
 )
 
 func ExampleBool() {
@@ -21,7 +22,7 @@ func TestBoolType_UnmarshalGo(t *testing.T) {
 	var nt idl.BoolType
 
 	var b bool
-	if err := nt.UnmarshalGo(true, &b); err != nil {
+	if err := idl.UnmarshalGo(nt, true, &b); err != nil {
 		t.Fatal(err)
 	}
 	if !b {
@@ -29,7 +30,7 @@ func TestBoolType_UnmarshalGo(t *testing.T) {
 	}
 
 	var a any
-	if err := nt.UnmarshalGo(true, &a); err == nil {
+	if err := idl.UnmarshalGo(nt, true, &a); err == nil {
 		t.Fatal("expected error")
 	} else {
 		if _, ok := err.(*idl.UnmarshalGoError); !ok {

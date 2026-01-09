@@ -78,7 +78,7 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 			idl.NewInt(0),
 			1, int64(2), int32(3), int16(4), int8(5),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n.BigInt().Int64() != int64(i) {
@@ -87,7 +87,7 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("int64", func(t *testing.T) {
 		nt := idl.Int64Type()
@@ -96,7 +96,7 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			int64(0), int32(1), int16(2), int8(3),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != int64(i) {
@@ -107,11 +107,11 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewInt(0), 0,
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("int32", func(t *testing.T) {
 		nt := idl.Int32Type()
@@ -120,7 +120,7 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			int32(0), int16(1), int8(2),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != int32(i) {
@@ -131,11 +131,11 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewInt(0), 0, int64(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("int16", func(t *testing.T) {
 		nt := idl.Int16Type()
@@ -144,7 +144,7 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			int16(0), int8(1),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != int16(i) {
@@ -155,11 +155,11 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewInt(0), 0, int64(0), int32(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 	t.Run("int8", func(t *testing.T) {
 		nt := idl.Int8Type()
@@ -168,7 +168,7 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for i, v := range []any{
 			int8(0),
 		} {
-			if err := nt.UnmarshalGo(v, &n); err != nil {
+			if err := idl.UnmarshalGo(nt, v, &n); err != nil {
 				t.Fatal(err)
 			}
 			if n != int8(i) {
@@ -179,10 +179,10 @@ func TestIntType_UnmarshalGo(t *testing.T) {
 		for _, v := range []any{
 			idl.NewInt(0), 0, int64(0), int32(0), int16(0),
 		} {
-			expectErr(t, nt.UnmarshalGo(v, &n))
+			expectErr(t, idl.UnmarshalGo(nt, v, &n))
 		}
 
 		var a any
-		expectErr(t, nt.UnmarshalGo(0, &a))
+		expectErr(t, idl.UnmarshalGo(nt, 0, &a))
 	})
 }
