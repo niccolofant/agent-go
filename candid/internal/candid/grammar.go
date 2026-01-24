@@ -15,7 +15,7 @@ var (
 	ActorType   = op.Capture{Name: "ActorType", Value: op.And{'{', OWs, op.Optional{Value: op.And{MethType, op.ZeroOrMore{Value: op.And{';', OWs, MethType}}, op.Optional{Value: ';'}, OWs}}, '}'}}
 	MethType    = op.Capture{Name: "MethType", Value: op.And{Name, OSp, ':', OWs, op.Or{FuncType, Id}}}
 	FuncType    = op.Capture{Name: "FuncType", Value: op.And{TupType, op.Optional{Value: op.And{Sp, "->", OWs, TupType, op.Optional{Value: op.And{Sp, FuncAnn}}}}}}
-	FuncAnn     = op.Capture{Name: "FuncAnn", Value: op.Or{"oneway", "query"}}
+	FuncAnn     = op.Capture{Name: "FuncAnn", Value: op.Or{"oneway", "query", "composite_query"}}
 	TupType     = op.Capture{Name: "TupType", Value: op.Or{op.And{'(', OWs, op.Optional{Value: op.And{ArgType, op.ZeroOrMore{Value: op.And{',', Sp, ArgType}}, op.Optional{Value: op.And{',', OWs}}}}, OWs, ')'}, ArgType}}
 	ArgType     = op.Capture{Name: "ArgType", Value: op.And{op.Optional{Value: op.And{Name, OSp, ':', Sp}}, DataType}}
 	FieldType   = op.Capture{Name: "FieldType", Value: op.Or{op.And{op.Optional{Value: op.And{op.Or{Nat, Name}, OSp, ':', OWs}}, DataType}, Nat, Name}}

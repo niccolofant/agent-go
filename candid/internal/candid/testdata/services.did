@@ -1,8 +1,9 @@
 service : {};
+service : (Governance) -> {};
 service : {
   ping : () -> ();
 };
 service : {
   reverse : (text) -> (text);
   divMod : (dividend : nat, divisor : nat) -> (div : nat, mod : nat);
-};
+}
