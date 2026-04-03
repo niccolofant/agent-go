@@ -1,9 +1,9 @@
 package agent
 
 import (
-	"github.com/aviate-labs/agent-go/certification"
-	"github.com/aviate-labs/agent-go/certification/hashtree"
-	"github.com/aviate-labs/agent-go/principal"
+	"github.com/niccolofant/agent-go/certification"
+	"github.com/niccolofant/agent-go/certification/hashtree"
+	"github.com/niccolofant/agent-go/principal"
 	"github.com/fxamacker/cbor/v2"
 	"google.golang.org/protobuf/proto"
 )

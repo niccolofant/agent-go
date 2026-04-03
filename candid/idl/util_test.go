@@ -5,8 +5,8 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/aviate-labs/agent-go/candid"
-	"github.com/aviate-labs/agent-go/candid/idl"
+	"github.com/niccolofant/agent-go/candid"
+	"github.com/niccolofant/agent-go/candid/idl"
 )
 
 func TestHash(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/aviate-labs/agent-go/principal"
+	"github.com/niccolofant/agent-go/principal"
 	"github.com/aviate-labs/leb128"
 )
 
