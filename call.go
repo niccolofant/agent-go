@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"strings"
+
+	"github.com/fxamacker/cbor/v2"
 	"github.com/niccolofant/agent-go/certification"
 	"github.com/niccolofant/agent-go/certification/hashtree"
 	"github.com/niccolofant/agent-go/principal"
-	"github.com/fxamacker/cbor/v2"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -13,8 +15,13 @@ func (c APIRequest[_, Out]) CallAndWait(out Out) error {
 	c.a.logger.Printf("[AGENT] CALL %s %s (%x)", c.effectiveCanisterID, c.methodName, c.requestID)
 	rawCertificate, err := c.a.call(c.effectiveCanisterID, c.data)
 	if err != nil {
-		return err
+		if !isTransientError(err) {
+			return err
+		}
+		// EOF/transient: fall through to poll to check if it went through
+		rawCertificate = nil
 	}
+
 	if len(rawCertificate) != 0 {
 		var certificate certification.Certificate
 		if err := cbor.Unmarshal(rawCertificate, &certificate); err != nil {
@@ -27,16 +34,11 @@ func (c APIRequest[_, Out]) CallAndWait(out Out) error {
 
 		rejectCode, err := certificate.Tree.Lookup(append(path, hashtree.Label("reject_code"))...)
 		if err != nil {
-			return err
+			// Not in tree yet — fall through to poll
+			goto poll
 		}
-		message, err := certificate.Tree.Lookup(append(path, hashtree.Label("reject_message"))...)
-		if err != nil {
-			return err
-		}
-		errorCode, err := certificate.Tree.Lookup(append(path, hashtree.Label("error_code"))...)
-		if err != nil {
-			return err
-		}
+		message, _ := certificate.Tree.Lookup(append(path, hashtree.Label("reject_message"))...)
+		errorCode, _ := certificate.Tree.Lookup(append(path, hashtree.Label("error_code"))...)
 		return preprocessingError{
 			RejectCode: uint64FromBytes(rejectCode),
 			Message:    string(message),
@@ -44,6 +46,8 @@ func (c APIRequest[_, Out]) CallAndWait(out Out) error {
 		}
 	}
 
+
+	poll:
 	raw, err := c.a.poll(c.effectiveCanisterID, c.requestID)
 	if err != nil {
 		return err
@@ -67,4 +71,17 @@ func (a Agent) CallProto(canisterID principal.Principal, methodName string, in, 
 		return err
 	}
 	return call.CallAndWait(out)
+}
+
+func isTransientError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "EOF") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "timeout") ||
+		strings.Contains(msg, "temporary") ||
+		strings.Contains(msg, "TLS handshake")
 }
