@@ -5,13 +5,13 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/aviate-labs/leb128"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/niccolofant/agent-go"
 	"github.com/niccolofant/agent-go/certification"
 	"github.com/niccolofant/agent-go/certification/hashtree"
 	v1 "github.com/niccolofant/agent-go/clients/registry/proto/v1"
 	"github.com/niccolofant/agent-go/principal"
-	"github.com/aviate-labs/leb128"
-	"github.com/fxamacker/cbor/v2"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -22,12 +22,36 @@ type DataProvider struct {
 	a *agent.Agent
 }
 
-func NewDataProvider() (*DataProvider, error) {
-	a, err := agent.New(agent.DefaultConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create agent: %w", err)
+func NewDataProvider(a *agent.Agent) (*DataProvider) {
+	return &DataProvider{a: a}
+}
+
+func (d DataProvider) GetSubnetForCanister(canID principal.Principal) (principal.Principal, error) {
+    type request struct {
+        Principal *principal.Principal `ic:"principal"`
+    }
+    type result struct {
+		Ok  *principal.Principal     `ic:"Ok,variant"`
+		Err *string `ic:"Err,variant"`
 	}
-	return &DataProvider{a: a}, nil
+
+    var resp result
+    if err := d.a.Query(
+        REGISTRY_PRINCIPAL,
+        "get_subnet_for_canister",
+        []any{request{Principal: &canID}},
+        []any{&resp},
+    ); err != nil {
+        return principal.Principal{}, fmt.Errorf("query failed: %w", err)
+    }
+
+    if resp.Err != nil {
+        return principal.Principal{}, fmt.Errorf("registry error: %s", *resp.Err)
+    }
+    if resp.Ok == nil {
+        return principal.Principal{}, fmt.Errorf("no subnet_id returned")
+    }
+    return *resp.Ok, nil
 }
 
 func (d DataProvider) GetCertifiedChangesSince(version uint64, publicKey []byte) ([]VersionedRecord, uint64, error) {
