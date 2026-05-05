@@ -157,14 +157,15 @@ func (c *APIRequest[In, Out]) WithEffectiveCanisterID(canisterID principal.Princ
 
 // Agent is a client for the Internet Computer.
 type Agent struct {
-	client           Client
-	ctx              context.Context
-	identity         identity.Identity
-	ingressExpiry    time.Duration
-	rootKey          []byte
-	logger           Logger
-	delay, timeout   time.Duration
-	verifySignatures bool
+	client                 Client
+	ctx                    context.Context
+	identity               identity.Identity
+	ingressExpiry          time.Duration
+	rootKey                []byte
+	logger                 Logger
+	delay, timeout         time.Duration
+	verifySignatures       bool
+	queryVerificationCache *queryVerificationKeyCache
 }
 
 // New returns a new Agent based on the given configuration.
@@ -198,15 +199,16 @@ func New(cfg Config) (*Agent, error) {
 		timeout = cfg.PollTimeout
 	}
 	return &Agent{
-		client:           client,
-		ctx:              context.Background(),
-		identity:         id,
-		ingressExpiry:    cfg.IngressExpiry,
-		rootKey:          rootKey,
-		logger:           client.logger,
-		delay:            delay,
-		timeout:          timeout,
-		verifySignatures: !cfg.DisableSignedQueryVerification,
+		client:                 client,
+		ctx:                    context.Background(),
+		identity:               id,
+		ingressExpiry:          cfg.IngressExpiry,
+		rootKey:                rootKey,
+		logger:                 client.logger,
+		delay:                  delay,
+		timeout:                timeout,
+		verifySignatures:       !cfg.DisableSignedQueryVerification,
+		queryVerificationCache: newQueryVerificationKeyCache(cfg.IngressExpiry),
 	}, nil
 }
 
@@ -388,7 +390,14 @@ func (a Agent) poll(ecID principal.Principal, requestID RequestID) ([]byte, erro
 }
 
 func (a Agent) readState(ecID principal.Principal, data []byte) (map[string][]byte, error) {
-	ctx, cancel := context.WithTimeout(a.ctx, a.ingressExpiry)
+	return a.readStateContext(a.ctx, ecID, data)
+}
+
+func (a Agent) readStateContext(ctx context.Context, ecID principal.Principal, data []byte) (map[string][]byte, error) {
+	if ctx == nil {
+		ctx = a.ctx
+	}
+	ctx, cancel := context.WithTimeout(ctx, a.ingressExpiry)
 	defer cancel()
 	resp, err := a.client.ReadState(ctx, ecID, data)
 	if err != nil {
@@ -399,6 +408,10 @@ func (a Agent) readState(ecID principal.Principal, data []byte) (map[string][]by
 }
 
 func (a Agent) readStateCertificate(ecID principal.Principal, paths [][]hashtree.Label) (*certification.Certificate, error) {
+	return a.readStateCertificateContext(a.ctx, ecID, paths)
+}
+
+func (a Agent) readStateCertificateContext(ctx context.Context, ecID principal.Principal, paths [][]hashtree.Label) (*certification.Certificate, error) {
 	_, data, err := a.sign(Request{
 		Type:          RequestTypeReadState,
 		Sender:        a.Sender(),
@@ -409,7 +422,7 @@ func (a Agent) readStateCertificate(ecID principal.Principal, paths [][]hashtree
 		return nil, err
 	}
 	a.logger.Printf("[AGENT] READ STATE %s (ecID)", ecID)
-	resp, err := a.readState(ecID, data)
+	resp, err := a.readStateContext(ctx, ecID, data)
 	if err != nil {
 		return nil, err
 	}
