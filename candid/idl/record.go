@@ -220,22 +220,12 @@ func (record RecordType) unmarshalMap(raw map[string]any, _v *map[string]any) er
 }
 
 func (record RecordType) unmarshalStruct(raw map[string]any, _v reflect.Value) error {
-	findField := func(name string) (reflect.Value, bool) {
-		name = lowerFirstCharacter(name)
-		for i := range _v.NumField() {
-			f := _v.Type().Field(i)
-			tag := ParseTags(f)
-			if tag.Name == name || HashString(tag.Name) == name {
-				return _v.Field(i), true
-			}
-		}
-		return reflect.Value{}, false
-	}
 	for _, f := range record.Fields {
-		v, ok := findField(f.Name)
+		i, ok := lookupStructField(_v.Type(), f.Name)
 		if !ok {
 			continue
 		}
+		v := _v.Field(i)
 		v = v.Addr()
 		if v.IsNil() {
 			// Set to a new value if the field is nil.

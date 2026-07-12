@@ -25,9 +25,6 @@ func canUnmarshalDirect(t idl.Type, v any) bool {
 		return false
 	}
 	dst := rv.Elem()
-	if !hasUsefulSkip(t, dst, false, make(map[decodeIntoVisit]bool), make(map[uintptr]bool)) {
-		return false
-	}
 	return canDecodeIntoValue(t, dst, make(map[decodeIntoVisit]bool), make(map[uintptr]bool))
 }
 
@@ -143,86 +140,6 @@ func canSkipValue(t idl.Type, seen map[uintptr]bool) bool {
 	default:
 		return false
 	}
-}
-
-func skipIsUseful(t idl.Type, seen map[uintptr]bool) bool {
-	if key, ok := typePointerKey(t); ok {
-		if seen[key] {
-			return false
-		}
-		seen[key] = true
-		defer delete(seen, key)
-	}
-	switch t := t.(type) {
-	case *idl.RecordType, *idl.VectorType, *idl.VariantType:
-		return true
-	case *idl.OptionalType:
-		return skipIsUseful(t.Type, seen)
-	default:
-		return false
-	}
-}
-
-func hasUsefulSkip(t idl.Type, dst reflect.Value, repeated bool, seen map[decodeIntoVisit]bool, skipSeen map[uintptr]bool) bool {
-	if !dst.IsValid() {
-		return false
-	}
-	if dst.CanAddr() && dst.Addr().Type() == rawMessagePtrType {
-		return false
-	}
-	if key, ok := decodeIntoVisitKey(t, dst); ok {
-		if seen[key] {
-			return false
-		}
-		seen[key] = true
-		defer delete(seen, key)
-	}
-
-	switch t := t.(type) {
-	case *idl.RecordType:
-		if dst.Kind() != reflect.Struct {
-			return false
-		}
-		for _, f := range t.Fields {
-			field, ok := fieldByCandidName(dst, f.Name)
-			if !ok {
-				if skipIsUseful(f.Type, skipSeen) || (repeated && canSkipValue(f.Type, skipSeen)) {
-					return true
-				}
-				continue
-			}
-			if hasUsefulSkip(f.Type, field, repeated, seen, skipSeen) {
-				return true
-			}
-		}
-	case *idl.VectorType:
-		if dst.Kind() != reflect.Slice && dst.Kind() != reflect.Array {
-			return false
-		}
-		return hasUsefulSkip(t.Type, reflect.New(dst.Type().Elem()).Elem(), true, seen, skipSeen)
-	case *idl.OptionalType:
-		if dst.Kind() != reflect.Pointer {
-			return false
-		}
-		return hasUsefulSkip(t.Type, reflect.New(dst.Type().Elem()).Elem(), repeated, seen, skipSeen)
-	case *idl.VariantType:
-		if dst.Kind() != reflect.Struct {
-			return false
-		}
-		for _, f := range t.Fields {
-			field, ok := fieldByCandidName(dst, f.Name)
-			if !ok {
-				continue
-			}
-			if field.Kind() != reflect.Pointer {
-				continue
-			}
-			if hasUsefulSkip(f.Type, reflect.New(field.Type().Elem()).Elem(), repeated, seen, skipSeen) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func decodeIntoValue(t idl.Type, r *bytes.Reader, dst reflect.Value) error {

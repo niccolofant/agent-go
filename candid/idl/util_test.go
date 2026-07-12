@@ -47,6 +47,23 @@ func TestHash(t *testing.T) {
 	if h := idl.Hash("bar"); h.Cmp(big.NewInt(4895187)) != 0 {
 		t.Errorf("expected '4895187', got '%s'", h)
 	}
+	for _, value := range []string{"naive", "naive field", "naive-field", "na\u00efve"} {
+		want := referenceCandidHash(value)
+		if got := idl.Hash(value); got.Cmp(want) != 0 {
+			t.Errorf("Hash(%q) = %s, want %s", value, got, want)
+		}
+		if got := idl.HashString(value); got != want.String() {
+			t.Errorf("HashString(%q) = %s, want %s", value, got, want)
+		}
+	}
+}
+
+func referenceCandidHash(s string) *big.Int {
+	var hash uint32
+	for _, b := range []byte(s) {
+		hash = hash*223 + uint32(b)
+	}
+	return new(big.Int).SetUint64(uint64(hash))
 }
 
 func test(types []idl.Type, args []any) {

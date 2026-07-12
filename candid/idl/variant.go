@@ -273,17 +273,12 @@ func (variant VariantType) unmarshalMap(name string, value any, _v *map[string]a
 }
 
 func (variant VariantType) unmarshalStruct(name string, value any, _v reflect.Value) error {
-	var v reflect.Value
-	name = lowerFirstCharacter(name)
-	for i := 0; i < _v.NumField(); i++ {
-		tag := ParseTags(_v.Type().Field(i))
-		if tag.Name == name || HashString(tag.Name) == name {
-			v = _v.Field(i)
-		}
-	}
-	if !v.IsValid() {
+	i, ok := lookupStructField(_v.Type(), name)
+	if !ok {
 		return NewUnmarshalGoError(value, _v.Interface())
 	}
+	v := _v.Field(i)
+	name = lowerFirstCharacter(name)
 	for _, f := range variant.Fields {
 		if f.Name != name {
 			continue

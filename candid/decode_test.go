@@ -179,6 +179,54 @@ func TestUnmarshalDirect_skipsUnknownNestedFields(t *testing.T) {
 	}
 }
 
+func TestUnmarshalDirect_fullRecord(t *testing.T) {
+	type row struct {
+		ID     uint64  `ic:"id"`
+		Amount idl.Nat `ic:"amount"`
+		Note   *string `ic:"note"`
+	}
+	type wire struct {
+		Rows  []row  `ic:"rows"`
+		Label string `ic:"label"`
+	}
+
+	note := "ready"
+	want := wire{
+		Rows: []row{
+			{ID: 7, Amount: idl.NewNat(uint64(42)), Note: &note},
+			{ID: 8, Amount: idl.NewNat(uint64(99))},
+		},
+		Label: "book",
+	}
+	encoded, err := Marshal([]any{want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts, _, err := decodeTypes(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got wire
+	if !canUnmarshalDirect(ts[0], &got) {
+		t.Fatal("expected complete record to use direct unmarshal path")
+	}
+	if err := Unmarshal(encoded, []any{&got}); err != nil {
+		t.Fatal(err)
+	}
+	if got.Label != want.Label || len(got.Rows) != len(want.Rows) {
+		t.Fatalf("got %#v, want %#v", got, want)
+	}
+	for i := range want.Rows {
+		if got.Rows[i].ID != want.Rows[i].ID || got.Rows[i].Amount.BigInt().Cmp(want.Rows[i].Amount.BigInt()) != 0 {
+			t.Fatalf("row %d: got %#v, want %#v", i, got.Rows[i], want.Rows[i])
+		}
+		if (got.Rows[i].Note == nil) != (want.Rows[i].Note == nil) || got.Rows[i].Note != nil && *got.Rows[i].Note != *want.Rows[i].Note {
+			t.Fatalf("row %d note: got %v, want %v", i, got.Rows[i].Note, want.Rows[i].Note)
+		}
+	}
+}
+
 func TestUnmarshalDirect_unknownVariantArmStillErrors(t *testing.T) {
 	type wireVariant struct {
 		Known *uint64 `ic:"known,variant"`
@@ -232,6 +280,16 @@ func BenchmarkUnmarshal_skippedVsMaterializedNestedFields(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
 			var value got
+			if err := Unmarshal(encoded, []any{&value}); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("direct_full", func(b *testing.B) {
+		b.ReportAllocs()
+		for i := 0; i < b.N; i++ {
+			var value wire
 			if err := Unmarshal(encoded, []any{&value}); err != nil {
 				b.Fatal(err)
 			}
