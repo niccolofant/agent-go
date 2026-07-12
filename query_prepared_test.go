@@ -80,6 +80,41 @@ func TestPreparedQueryCanBeReusedConcurrently(t *testing.T) {
 	}
 }
 
+func TestPreparedQueryRawDefersPayloadDecode(t *testing.T) {
+	rawArg := []byte("deliberately not Candid")
+	rawResponse, err := cbor.Marshal(map[string]any{
+		"status": "replied",
+		"reply":  map[string]any{"arg": rawArg},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := &recordingQueryTransport{response: rawResponse}
+	host, _ := url.Parse("https://ic0.app")
+	a, err := New(Config{
+		ClientConfig: []ClientOption{
+			WithHostURL(host),
+			WithHttpClient(&http.Client{Transport: transport}),
+		},
+		DisableSignedQueryVerification: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query, err := a.PrepareQuery(principal.AnonymousID, "prepared", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := query.QueryRawContext(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, rawArg) {
+		t.Fatalf("raw reply = %q, want %q", got, rawArg)
+	}
+}
+
 var preparedQuerySink *CandidAPIRequest
 
 func BenchmarkPrepareQuery(b *testing.B) {

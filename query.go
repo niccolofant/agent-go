@@ -37,6 +37,18 @@ func (q APIRequest[In, Out]) QueryWithContext(ctx context.Context, out Out, skip
 
 // QueryContext calls a method on a canister and unmarshals the result into the given values.
 func (q APIRequest[In, Out]) QueryContext(ctx context.Context, out Out, skipVerification bool) error {
+	raw, err := q.QueryRawContext(ctx, skipVerification)
+	if err != nil {
+		return err
+	}
+	return q.unmarshal(raw, out)
+}
+
+// QueryRawContext executes a prepared query and returns the raw method reply
+// argument without decoding it with the request's payload codec. It is useful
+// for replica races that need to defer expensive Candid decoding until a
+// response is actually considered for semantic freshness.
+func (q APIRequest[In, Out]) QueryRawContext(ctx context.Context, skipVerification bool) ([]byte, error) {
 	q.a.logger.Printf("[AGENT] QUERY %s %s", q.effectiveCanisterID, q.methodName)
 	if ctx == nil {
 		ctx = q.a.ctx
@@ -45,30 +57,30 @@ func (q APIRequest[In, Out]) QueryContext(ctx context.Context, out Out, skipVeri
 	defer cancel()
 	rawResp, err := q.a.client.Query(ctx, q.effectiveCanisterID, q.data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var resp Response
 	if err := cbor.Unmarshal(rawResp, &resp); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Verify query signatures.
 	if !skipVerification && q.a.verifySignatures {
 		if len(resp.Signatures) == 0 {
-			return fmt.Errorf("no signatures")
+			return nil, fmt.Errorf("no signatures")
 		}
 		if len(q.effectiveCanisterID.Raw) == 0 {
-			return fmt.Errorf("can not verify signature without effective canister ID")
+			return nil, fmt.Errorf("can not verify signature without effective canister ID")
 		}
 
 		keys, err := q.a.queryVerificationKeys(ctx, q.effectiveCanisterID, resp.Signatures)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, signature := range resp.Signatures {
 			publicKey, ok := keys.publicKey(signature.Identity)
 			if !ok {
-				return fmt.Errorf("no public key found for signature identity %s", signature.Identity)
+				return nil, fmt.Errorf("no public key found for signature identity %s", signature.Identity)
 			}
 			switch resp.Status {
 			case "replied":
@@ -81,14 +93,14 @@ func (q APIRequest[In, Out]) QueryContext(ctx context.Context, out Out, skipVeri
 					},
 				)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				if !ed25519.Verify(
 					publicKey,
 					append([]byte("\x0Bic-response"), sig[:]...),
 					signature.Signature,
 				) {
-					return fmt.Errorf("invalid replied signature")
+					return nil, fmt.Errorf("invalid replied signature")
 				}
 			case "rejected":
 				var codeBuf [10]byte
@@ -104,14 +116,14 @@ func (q APIRequest[In, Out]) QueryContext(ctx context.Context, out Out, skipVeri
 					},
 				)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				if !ed25519.Verify(
 					publicKey,
 					append([]byte("\x0Bic-response"), sig[:]...),
 					signature.Signature,
 				) {
-					return fmt.Errorf("invalid rejected signature")
+					return nil, fmt.Errorf("invalid rejected signature")
 				}
 			default:
 				panic("unreachable")
@@ -124,11 +136,11 @@ func (q APIRequest[In, Out]) QueryContext(ctx context.Context, out Out, skipVeri
 			Arg []byte `ic:"arg"`
 		}
 		if err := cbor.Unmarshal(resp.Reply, &reply); err != nil {
-			return err
+			return nil, err
 		}
-		return q.unmarshal(reply.Arg, out)
+		return reply.Arg, nil
 	case "rejected":
-		return preprocessingError{
+		return nil, preprocessingError{
 			RejectCode: resp.RejectCode,
 			Message:    resp.RejectMsg,
 			ErrorCode:  resp.ErrorCode,
