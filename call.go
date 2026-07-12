@@ -33,7 +33,18 @@ func (c APIRequest[_, Out]) CallAndWaitWithContext(ctx context.Context, out Out)
 	if len(rawCertificate) != 0 {
 		var certificate certification.Certificate
 		if err := cbor.Unmarshal(rawCertificate, &certificate); err != nil {
-			return err
+			goto poll
+		}
+		// A v4 synchronous response is served by a single replica. Treat it as
+		// authoritative only after the same time, signature, delegation, and
+		// canister-range checks used by read_state. If validation fails, the
+		// update may still have executed, so resolve it through certified polling
+		// instead of returning a potentially false failure.
+		if err := certificate.VerifyTime(c.a.ingressExpiry); err != nil {
+			goto poll
+		}
+		if err := certification.VerifyCertificate(certificate, c.effectiveCanisterID, c.a.rootKey); err != nil {
+			goto poll
 		}
 		path := []hashtree.Label{hashtree.Label("request_status"), c.requestID[:]}
 		if raw, err := certificate.Tree.Lookup(append(path, hashtree.Label("reply"))...); err == nil {

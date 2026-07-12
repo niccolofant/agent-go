@@ -12,6 +12,18 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// PrepareQuery encodes and signs a Candid query without sending it. The
+// returned request is immutable during Query/QueryContext and may be executed
+// concurrently with a distinct output value per call. This lets callers race
+// one byte-identical query envelope across multiple replicas without repeating
+// Candid encoding, request-ID hashing, signing, or CBOR envelope encoding.
+//
+// Call WithEffectiveCanisterID, when needed, before sharing the request between
+// goroutines; mutating it concurrently with execution is not supported.
+func (a *Agent) PrepareQuery(canisterID principal.Principal, methodName string, in []any) (*CandidAPIRequest, error) {
+	return a.CreateCandidAPIRequest(RequestTypeQuery, canisterID, methodName, in...)
+}
+
 // Query calls a method on a canister and unmarshals the result into the given values.
 func (q APIRequest[In, Out]) Query(out Out, skipVerification bool) error {
 	return q.QueryContext(q.a.ctx, out, skipVerification)
@@ -133,7 +145,7 @@ func (a Agent) Query(canisterID principal.Principal, methodName string, in, out 
 
 // QueryContext calls a method on a canister and unmarshals the result into the given values.
 func (a Agent) QueryContext(ctx context.Context, canisterID principal.Principal, methodName string, in, out []any) error {
-	query, err := a.CreateCandidAPIRequest(RequestTypeQuery, canisterID, methodName, in...)
+	query, err := a.PrepareQuery(canisterID, methodName, in)
 	if err != nil {
 		return err
 	}
@@ -181,7 +193,7 @@ func (a Agent) QueryWithContext(ctx context.Context, canisterID principal.Princi
 // QueryWithEffectiveCanisterID is like Query but lets the caller supply the effective
 // canister ID. Symmetric with CallWithEffectiveCanisterID.
 func (a Agent) QueryWithEffectiveCanisterID(canisterID, effectiveCanisterID principal.Principal, methodName string, in, out []any) error {
-	query, err := a.CreateCandidAPIRequest(RequestTypeQuery, canisterID, methodName, in...)
+	query, err := a.PrepareQuery(canisterID, methodName, in)
 	if err != nil {
 		return err
 	}
