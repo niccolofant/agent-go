@@ -28,8 +28,12 @@ func AppendSignedInt64(dst []byte, v int64) []byte {
 // DecodeSigned converts the byte slice back to a signed integer. It consumes
 // only the LEB128 bytes from r, leaving the reader positioned right after.
 func DecodeSigned(r *bytes.Reader) (*big.Int, error) {
-	var bs []byte
-	for {
+	var (
+		prefix [10]byte
+		value  uint64
+		shift  uint
+	)
+	for i := 0; i < 9; i++ {
 		b, err := r.ReadByte()
 		if err != nil {
 			if err == io.EOF {
@@ -37,15 +41,53 @@ func DecodeSigned(r *bytes.Reader) (*big.Int, error) {
 			}
 			return nil, err
 		}
-		bs = append(bs, b)
+		prefix[i] = b
+		value |= uint64(b&0x7f) << shift
+		shift += 7
 		if b < 0x80 {
-			if (b & 0x40) == 0 {
-				return decodeUnsignedBytes(bs), nil
+			if b&0x40 != 0 {
+				value |= ^uint64(0) << shift
 			}
-			break
+			return big.NewInt(int64(value)), nil
 		}
 	}
 
+	// Ten bytes are enough for every int64. The final payload must be pure
+	// sign extension: 0x00 for non-negative values or 0x7f for negatives.
+	b, err := r.ReadByte()
+	if err != nil {
+		if err == io.EOF {
+			return nil, fmt.Errorf("too short")
+		}
+		return nil, err
+	}
+	prefix[9] = b
+	if b < 0x80 && (b == 0x00 || b == 0x7f) {
+		if b == 0x7f {
+			value |= uint64(1) << 63
+		}
+		return big.NewInt(int64(value)), nil
+	}
+
+	bs := append([]byte(nil), prefix[:]...)
+	for b >= 0x80 {
+		b, err = r.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				return nil, fmt.Errorf("too short")
+			}
+			return nil, err
+		}
+		bs = append(bs, b)
+	}
+	return decodeSignedBytes(bs), nil
+}
+
+func decodeSignedBytes(bs []byte) *big.Int {
+	last := bs[len(bs)-1]
+	if last&0x40 == 0 {
+		return decodeUnsignedBytes(bs)
+	}
 	l := len(bs) - 1
 	v := new(big.Int)
 	for i := l; i >= 0; i-- {
@@ -54,7 +96,7 @@ func DecodeSigned(r *bytes.Reader) (*big.Int, error) {
 	}
 	v = v.Mul(v, big.NewInt(-1))
 	v = v.Add(v, big.NewInt(-1))
-	return v, nil
+	return v
 }
 
 // EncodeSigned encodes a signed integer.

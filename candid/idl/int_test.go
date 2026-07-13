@@ -1,11 +1,45 @@
 package idl_test
 
 import (
+	"bytes"
+	"math"
 	"math/big"
+	"reflect"
 	"testing"
 
 	"github.com/niccolofant/agent-go/candid/idl"
 )
+
+func TestFixedIntDecodeBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		typ  idl.Type
+		want any
+	}{
+		{"int8 min", idl.Int8Type(), int8(math.MinInt8)},
+		{"int8 max", idl.Int8Type(), int8(math.MaxInt8)},
+		{"int16 min", idl.Int16Type(), int16(math.MinInt16)},
+		{"int16 max", idl.Int16Type(), int16(math.MaxInt16)},
+		{"int32 min", idl.Int32Type(), int32(math.MinInt32)},
+		{"int32 max", idl.Int32Type(), int32(math.MaxInt32)},
+		{"int64 min", idl.Int64Type(), int64(math.MinInt64)},
+		{"int64 max", idl.Int64Type(), int64(math.MaxInt64)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := tc.typ.EncodeValue(tc.want)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := tc.typ.Decode(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("got %v (%T), want %v (%T)", got, got, tc.want, tc.want)
+			}
+		})
+	}
+}
 
 func ExampleInt() {
 	test([]idl.Type{new(idl.IntType)}, []any{idl.NewInt(0)})

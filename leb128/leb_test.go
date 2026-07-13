@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"math/rand"
 	"testing"
 
 	"github.com/niccolofant/agent-go/leb128"
@@ -47,6 +48,7 @@ func TestUnsigned(t *testing.T) {
 		{"E58E26", big.NewInt(624485)},
 		{"80897A", big.NewInt(2000000)},
 		{"808098F4E9B5CA6A", big.NewInt(60000000000000000)},
+		{"FFFFFFFFFFFFFFFFFF01", new(big.Int).SetUint64(math.MaxUint64)},
 		{"EF9BAF8589CF959A92DEB7DE8A929EABB424", newInt(t, "24197857200151252728969465429440056815")},
 	} {
 		t.Run(test.Hex, func(t *testing.T) {
@@ -112,6 +114,7 @@ func TestUnsignedNonCanonical(t *testing.T) {
 		{"0x03", []byte{0x03}, 3},
 		{"0x83 0x00", []byte{0x83, 0x00}, 3},
 		{"0x83 0x80 0x00", []byte{0x83, 0x80, 0x00}, 3},
+		{"long zero extension", []byte{0x83, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x00}, 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := leb128.DecodeUnsigned(bytes.NewReader(tc.raw))
@@ -150,5 +153,35 @@ func TestUnsignedStreamingTrailingBytes(t *testing.T) {
 func TestUnsignedUnterminated(t *testing.T) {
 	if _, err := leb128.DecodeUnsigned(bytes.NewReader([]byte{0x80, 0x80, 0x80})); err == nil {
 		t.Fatal("expected error on unterminated ULEB128")
+	}
+}
+
+func TestUnsignedRandomRoundTrip(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	for i := 0; i < 10_000; i++ {
+		want := new(big.Int).SetUint64(rng.Uint64())
+		assertUnsignedRoundTrip(t, want)
+	}
+	for i := 0; i < 1_000; i++ {
+		var raw [32]byte
+		if _, err := rng.Read(raw[:]); err != nil {
+			t.Fatal(err)
+		}
+		assertUnsignedRoundTrip(t, new(big.Int).SetBytes(raw[:]))
+	}
+}
+
+func assertUnsignedRoundTrip(t *testing.T, want *big.Int) {
+	t.Helper()
+	encoded, err := leb128.EncodeUnsigned(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := leb128.DecodeUnsigned(bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Cmp(want) != 0 {
+		t.Fatalf("got %s, want %s (encoded %x)", got, want, encoded)
 	}
 }

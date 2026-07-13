@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"math/rand"
 	"testing"
 
 	"github.com/niccolofant/agent-go/leb128"
@@ -38,6 +39,8 @@ func TestSigned(t *testing.T) {
 		{"C0BB78", big.NewInt(-123456)},
 		{"8089FA00", big.NewInt(2000000)},
 		{"808098F4E9B5CAEA00", big.NewInt(60000000000000000)},
+		{"FFFFFFFFFFFFFFFFFF00", big.NewInt(math.MaxInt64)},
+		{"8080808080808080807F", big.NewInt(math.MinInt64)},
 		{"EF9BAF8589CF959A92DEB7DE8A929EABB424", newInt(t, "24197857200151252728969465429440056815")},
 		{"91E4D0FAF6B0EAE5EDA1C8A1F5EDE1D4CB5B", newInt(t, "-24197857200151252728969465429440056815")},
 	} {
@@ -134,6 +137,7 @@ func TestSignedNonCanonical(t *testing.T) {
 		{"0x7E", []byte{0x7E}, -2},
 		{"0xFE 0x7F", []byte{0xFE, 0x7F}, -2},
 		{"0xFE 0xFF 0x7F", []byte{0xFE, 0xFF, 0x7F}, -2},
+		{"long sign extension", []byte{0xFE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F}, -2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := leb128.DecodeSigned(bytes.NewReader(tc.raw))
@@ -179,5 +183,38 @@ func TestSignedTooShort(t *testing.T) {
 	// [x80]
 	if _, err := leb128.DecodeSigned(bytes.NewReader(raw[:len(raw)-2])); err == nil {
 		t.Error()
+	}
+}
+
+func TestSignedRandomRoundTrip(t *testing.T) {
+	rng := rand.New(rand.NewSource(2))
+	for i := 0; i < 10_000; i++ {
+		assertSignedRoundTrip(t, big.NewInt(int64(rng.Uint64())))
+	}
+	for i := 0; i < 1_000; i++ {
+		var raw [32]byte
+		if _, err := rng.Read(raw[:]); err != nil {
+			t.Fatal(err)
+		}
+		want := new(big.Int).SetBytes(raw[:])
+		if i&1 != 0 {
+			want.Neg(want)
+		}
+		assertSignedRoundTrip(t, want)
+	}
+}
+
+func assertSignedRoundTrip(t *testing.T, want *big.Int) {
+	t.Helper()
+	encoded, err := leb128.EncodeSigned(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := leb128.DecodeSigned(bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Cmp(want) != 0 {
+		t.Fatalf("got %s, want %s (encoded %x)", got, want, encoded)
 	}
 }

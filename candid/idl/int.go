@@ -192,57 +192,41 @@ func (n IntType) Decode(r *bytes.Reader) (any, error) {
 		}
 		return NewBigInt(bi), nil
 	case 8:
-		v := make([]byte, 8)
-		n, err := r.Read(v)
+		var v [8]byte
+		n, err := r.Read(v[:])
 		if err != nil {
 			return nil, err
 		}
 		if n != 8 {
 			return nil, fmt.Errorf("int64: too short")
 		}
-		bi, err := readInt(new(big.Int).SetUint64(binary.LittleEndian.Uint64(v)), 8)
-		if err != nil {
-			return nil, err
-		}
-		return bi.Int64(), nil
+		return int64(binary.LittleEndian.Uint64(v[:])), nil
 	case 4:
-		v := make([]byte, 4)
-		n, err := r.Read(v)
+		var v [4]byte
+		n, err := r.Read(v[:])
 		if err != nil {
 			return nil, err
 		}
 		if n != 4 {
 			return nil, fmt.Errorf("int32: too short")
 		}
-		bi, err := readInt(new(big.Int).SetUint64(uint64(binary.LittleEndian.Uint32(v))), 8)
-		if err != nil {
-			return nil, err
-		}
-		return int32(bi.Int64()), nil
+		return int32(binary.LittleEndian.Uint32(v[:])), nil
 	case 2:
-		v := make([]byte, 2)
-		n, err := r.Read(v)
+		var v [2]byte
+		n, err := r.Read(v[:])
 		if err != nil {
 			return nil, err
 		}
 		if n != 2 {
 			return nil, fmt.Errorf("int16: too short")
 		}
-		bi, err := readInt(new(big.Int).SetUint64(uint64(binary.LittleEndian.Uint16(v))), 8)
-		if err != nil {
-			return nil, err
-		}
-		return int16(bi.Int64()), nil
+		return int16(binary.LittleEndian.Uint16(v[:])), nil
 	case 1:
 		v, err := r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-		bi, err := readInt(new(big.Int).SetUint64(uint64(v)), 8)
-		if err != nil {
-			return nil, err
-		}
-		return int8(bi.Int64()), nil
+		return int8(v), nil
 	default:
 		return nil, fmt.Errorf("invalid int type with size %d", n.size)
 	}

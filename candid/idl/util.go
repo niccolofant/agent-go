@@ -81,17 +81,6 @@ func pad1(n int, bs []byte) []byte {
 	return out
 }
 
-func readInt(bi *big.Int, n int) (*big.Int, error) {
-	m := big.NewInt(2)
-	m = m.Exp(m, big.NewInt(int64((n-1)*8+7)), nil)
-	if bi.Cmp(m) >= 0 {
-		v := new(big.Int).Set(m)
-		v = v.Mul(v, big.NewInt(-2))
-		bi = bi.Add(bi, v)
-	}
-	return bi, nil
-}
-
 func reverse(s []byte) []byte {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]

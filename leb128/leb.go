@@ -25,38 +25,63 @@ func AppendUnsignedUint64(dst []byte, v uint64) []byte {
 
 // DecodeUnsigned converts the byte slice back to an unsigned integer.
 func DecodeUnsigned(r *bytes.Reader) (*big.Int, error) {
-	var (
-		weight = big.NewInt(1)
-		value  = new(big.Int)
-		tmp    = new(big.Int)
-	)
-	for {
+	var value uint64
+	for shift := uint(0); ; shift += 7 {
 		b, err := r.ReadByte()
 		if err != nil {
 			return nil, err
 		}
-		value = value.Add(value, tmp.Mul(tmp.SetInt64(int64(b&0x7F)), weight))
-		weight = weight.Mul(weight, x80)
-		if b < 0x80 {
-			break
+		payload := uint64(b & 0x7f)
+		if shift < 63 || shift == 63 && payload <= 1 {
+			value |= payload << shift
+			if b < 0x80 {
+				return new(big.Int).SetUint64(value), nil
+			}
+			continue
 		}
+
+		// The value exceeds uint64. Continue with arbitrary precision only for
+		// this uncommon path, retaining the low bits accumulated above.
+		out := new(big.Int).SetUint64(value)
+		term := new(big.Int).SetUint64(payload)
+		term.Lsh(term, shift)
+		out.Or(out, term)
+		for b >= 0x80 {
+			shift += 7
+			b, err = r.ReadByte()
+			if err != nil {
+				return nil, err
+			}
+			term.SetUint64(uint64(b & 0x7f))
+			term.Lsh(term, shift)
+			out.Or(out, term)
+		}
+		return out, nil
 	}
-	return value, nil
 }
 
 // decodeUnsignedBytes decodes a complete unsigned LEB128 byte slice without
 // allocating a reader.
 func decodeUnsignedBytes(bs []byte) *big.Int {
-	var (
-		weight = big.NewInt(1)
-		value  = new(big.Int)
-		tmp    = new(big.Int)
-	)
-	for _, b := range bs {
-		value = value.Add(value, tmp.Mul(tmp.SetInt64(int64(b&0x7F)), weight))
-		weight = weight.Mul(weight, x80)
+	var value uint64
+	for i, b := range bs {
+		shift := uint(i * 7)
+		payload := uint64(b & 0x7f)
+		if shift < 63 || shift == 63 && payload <= 1 {
+			value |= payload << shift
+			continue
+		}
+
+		out := new(big.Int).SetUint64(value)
+		term := new(big.Int)
+		for j := i; j < len(bs); j++ {
+			term.SetUint64(uint64(bs[j] & 0x7f))
+			term.Lsh(term, uint(j*7))
+			out.Or(out, term)
+		}
+		return out
 	}
-	return value
+	return new(big.Int).SetUint64(value)
 }
 
 // LEB128 represents an unsigned number encoded using (unsigned) LEB128.
