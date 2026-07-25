@@ -49,38 +49,65 @@ func (q APIRequest[In, Out]) QueryContext(ctx context.Context, out Out, skipVeri
 // for replica races that need to defer expensive Candid decoding until a
 // response is actually considered for semantic freshness.
 func (q APIRequest[In, Out]) QueryRawContext(ctx context.Context, skipVerification bool) ([]byte, error) {
+	raw, _, err := q.queryRawContext(ctx, skipVerification, false)
+	return raw, err
+}
+
+// QueryRawContextWithMetadata executes a prepared query and returns the raw
+// method reply together with API boundary routing metadata. It is intended for
+// replica races and diagnostics; ordinary callers should keep using
+// QueryRawContext to avoid header extraction.
+func (q APIRequest[In, Out]) QueryRawContextWithMetadata(
+	ctx context.Context,
+	skipVerification bool,
+) ([]byte, HTTPResponseMetadata, error) {
+	return q.queryRawContext(ctx, skipVerification, true)
+}
+
+func (q APIRequest[In, Out]) queryRawContext(
+	ctx context.Context,
+	skipVerification bool,
+	withMetadata bool,
+) ([]byte, HTTPResponseMetadata, error) {
+	var metadata HTTPResponseMetadata
 	q.a.logger.Printf("[AGENT] QUERY %s %s", q.effectiveCanisterID, q.methodName)
 	if ctx == nil {
 		ctx = q.a.ctx
 	}
 	ctx, cancel := context.WithTimeout(ctx, q.a.ingressExpiry)
 	defer cancel()
-	rawResp, err := q.a.client.Query(ctx, q.effectiveCanisterID, q.data)
+	var rawResp []byte
+	var err error
+	if withMetadata {
+		rawResp, metadata, err = q.a.client.QueryWithMetadata(ctx, q.effectiveCanisterID, q.data)
+	} else {
+		rawResp, err = q.a.client.Query(ctx, q.effectiveCanisterID, q.data)
+	}
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	var resp Response
 	if err := cbor.Unmarshal(rawResp, &resp); err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 
 	// Verify query signatures.
 	if !skipVerification && q.a.verifySignatures {
 		if len(resp.Signatures) == 0 {
-			return nil, fmt.Errorf("no signatures")
+			return nil, metadata, fmt.Errorf("no signatures")
 		}
 		if len(q.effectiveCanisterID.Raw) == 0 {
-			return nil, fmt.Errorf("can not verify signature without effective canister ID")
+			return nil, metadata, fmt.Errorf("can not verify signature without effective canister ID")
 		}
 
 		keys, err := q.a.queryVerificationKeys(ctx, q.effectiveCanisterID, resp.Signatures)
 		if err != nil {
-			return nil, err
+			return nil, metadata, err
 		}
 		for _, signature := range resp.Signatures {
 			publicKey, ok := keys.publicKey(signature.Identity)
 			if !ok {
-				return nil, fmt.Errorf("no public key found for signature identity %s", signature.Identity)
+				return nil, metadata, fmt.Errorf("no public key found for signature identity %s", signature.Identity)
 			}
 			switch resp.Status {
 			case "replied":
@@ -93,14 +120,14 @@ func (q APIRequest[In, Out]) QueryRawContext(ctx context.Context, skipVerificati
 					},
 				)
 				if err != nil {
-					return nil, err
+					return nil, metadata, err
 				}
 				if !ed25519.Verify(
 					publicKey,
 					append([]byte("\x0Bic-response"), sig[:]...),
 					signature.Signature,
 				) {
-					return nil, fmt.Errorf("invalid replied signature")
+					return nil, metadata, fmt.Errorf("invalid replied signature")
 				}
 			case "rejected":
 				var codeBuf [10]byte
@@ -116,14 +143,14 @@ func (q APIRequest[In, Out]) QueryRawContext(ctx context.Context, skipVerificati
 					},
 				)
 				if err != nil {
-					return nil, err
+					return nil, metadata, err
 				}
 				if !ed25519.Verify(
 					publicKey,
 					append([]byte("\x0Bic-response"), sig[:]...),
 					signature.Signature,
 				) {
-					return nil, fmt.Errorf("invalid rejected signature")
+					return nil, metadata, fmt.Errorf("invalid rejected signature")
 				}
 			default:
 				panic("unreachable")
@@ -136,11 +163,11 @@ func (q APIRequest[In, Out]) QueryRawContext(ctx context.Context, skipVerificati
 			Arg []byte `ic:"arg"`
 		}
 		if err := cbor.Unmarshal(resp.Reply, &reply); err != nil {
-			return nil, err
+			return nil, metadata, err
 		}
-		return reply.Arg, nil
+		return reply.Arg, metadata, nil
 	case "rejected":
-		return nil, preprocessingError{
+		return nil, metadata, preprocessingError{
 			RejectCode: resp.RejectCode,
 			Message:    resp.RejectMsg,
 			ErrorCode:  resp.ErrorCode,

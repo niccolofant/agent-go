@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/niccolofant/agent-go/principal"
@@ -18,6 +19,14 @@ import (
 
 // icp0 is the default host for the Internet Computer.
 var icp0, _ = url.Parse("https://icp0.io/")
+
+const (
+	headerICNodeID            = "X-Ic-Node-Id"
+	headerICSubnetID          = "X-Ic-Subnet-Id"
+	headerICCacheStatus       = "X-Ic-Cache-Status"
+	headerICCacheBypassReason = "X-Ic-Cache-Bypass-Reason"
+	headerICRetries           = "X-Ic-Retries"
+)
 
 // Client is a client for the IC agent.
 type Client struct {
@@ -30,6 +39,17 @@ type Client struct {
 	// deprecated /subnet/<subnet_id>/canister_ranges layout.
 	callVersion      string
 	readStateVersion string
+}
+
+// HTTPResponseMetadata contains IC routing metadata exposed by API boundary
+// nodes. It is populated only by opt-in metadata methods so ordinary queries
+// do not pay for header extraction.
+type HTTPResponseMetadata struct {
+	NodeID            string
+	SubnetID          string
+	CacheStatus       string
+	CacheBypassReason string
+	Retries           int
 }
 
 // NewClient creates a new client based on the given configuration.
@@ -107,6 +127,12 @@ func (c Client) Query(ctx context.Context, canisterID principal.Principal, data 
 	return c.post(ctx, "v2", "query", canisterID, data)
 }
 
+// QueryWithMetadata executes a query and returns API boundary routing metadata
+// alongside the raw CBOR response.
+func (c Client) QueryWithMetadata(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, HTTPResponseMetadata, error) {
+	return c.postWithMetadata(ctx, "v2", "query", canisterID, data)
+}
+
 func (c Client) ReadState(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, error) {
 	return c.post(ctx, c.readStateVersion, "read_state", canisterID, data)
 }
@@ -159,32 +185,65 @@ func (c Client) newRequest(ctx context.Context, method, url string, body io.Read
 }
 
 func (c Client) post(ctx context.Context, version, path string, canisterID principal.Principal, data []byte) ([]byte, error) {
+	body, _, err := c.postResponse(ctx, version, path, canisterID, data, false)
+	return body, err
+}
+
+func (c Client) postWithMetadata(ctx context.Context, version, path string, canisterID principal.Principal, data []byte) ([]byte, HTTPResponseMetadata, error) {
+	return c.postResponse(ctx, version, path, canisterID, data, true)
+}
+
+func (c Client) postResponse(
+	ctx context.Context,
+	version, path string,
+	canisterID principal.Principal,
+	data []byte,
+	withMetadata bool,
+) ([]byte, HTTPResponseMetadata, error) {
+	var metadata HTTPResponseMetadata
 	u, err := c.url(fmt.Sprintf("/api/%s/canister/%s/%s", version, canisterID.Encode(), path))
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	c.logger.Printf("[CLIENT] POST %s", u)
 	req, err := c.newRequest(ctx, "POST", u, bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+	if withMetadata {
+		metadata = responseMetadata(resp.Header)
+	}
 	switch resp.StatusCode {
 	case http.StatusOK:
-		return io.ReadAll(resp.Body)
+		body, err := io.ReadAll(resp.Body)
+		return body, metadata, err
 	default:
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return nil, metadata, err
 		}
-		return nil, fmt.Errorf("(%d) %s: %s", resp.StatusCode, resp.Status, body)
+		return nil, metadata, fmt.Errorf("(%d) %s: %s", resp.StatusCode, resp.Status, body)
 	}
+}
+
+func responseMetadata(headers http.Header) HTTPResponseMetadata {
+	metadata := HTTPResponseMetadata{
+		NodeID:            headers.Get(headerICNodeID),
+		SubnetID:          headers.Get(headerICSubnetID),
+		CacheStatus:       headers.Get(headerICCacheStatus),
+		CacheBypassReason: headers.Get(headerICCacheBypassReason),
+	}
+	if raw := headers.Get(headerICRetries); raw != "" {
+		metadata.Retries, _ = strconv.Atoi(raw)
+	}
+	return metadata
 }
 
 func (c Client) postSubnet(ctx context.Context, path string, subnetID principal.Principal, data []byte) ([]byte, error) {

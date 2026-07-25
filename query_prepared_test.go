@@ -115,7 +115,63 @@ func TestPreparedQueryRawDefersPayloadDecode(t *testing.T) {
 	}
 }
 
+func TestPreparedQueryRawReturnsBoundaryMetadata(t *testing.T) {
+	rawArg := []byte("raw reply")
+	rawResponse, err := cbor.Marshal(map[string]any{
+		"status": "replied",
+		"reply":  map[string]any{"arg": rawArg},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	transport := &recordingQueryTransport{
+		response: rawResponse,
+		headers: http.Header{
+			"X-Ic-Node-Id":             []string{"replica-node"},
+			"X-Ic-Subnet-Id":           []string{"subnet-id"},
+			"X-Ic-Cache-Status":        []string{"BYPASS"},
+			"X-Ic-Cache-Bypass-Reason": []string{"nonce"},
+			"X-Ic-Retries":             []string{"2"},
+		},
+	}
+	host, _ := url.Parse("https://ic0.app")
+	a, err := New(Config{
+		ClientConfig: []ClientOption{
+			WithHostURL(host),
+			WithHttpClient(&http.Client{Transport: transport}),
+		},
+		DisableSignedQueryVerification: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	query, err := a.PrepareQuery(principal.AnonymousID, "prepared", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, metadata, err := query.QueryRawContextWithMetadata(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, rawArg) {
+		t.Fatalf("raw reply = %q, want %q", got, rawArg)
+	}
+	want := HTTPResponseMetadata{
+		NodeID:            "replica-node",
+		SubnetID:          "subnet-id",
+		CacheStatus:       "BYPASS",
+		CacheBypassReason: "nonce",
+		Retries:           2,
+	}
+	if metadata != want {
+		t.Fatalf("metadata = %+v, want %+v", metadata, want)
+	}
+}
+
 var preparedQuerySink *CandidAPIRequest
+var preparedQueryRawSink []byte
+var preparedQueryMetadataSink HTTPResponseMetadata
 
 func BenchmarkPrepareQuery(b *testing.B) {
 	id, err := identity.NewRandomSecp256k1Identity()
@@ -143,10 +199,79 @@ func BenchmarkPrepareQuery(b *testing.B) {
 	}
 }
 
+func BenchmarkPreparedQueryRawMetadata(b *testing.B) {
+	rawResponse, err := cbor.Marshal(map[string]any{
+		"status": "replied",
+		"reply":  map[string]any{"arg": []byte("reply")},
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	transport := staticQueryTransport{
+		response: rawResponse,
+		headers: http.Header{
+			"X-Ic-Node-Id":      []string{"replica-node"},
+			"X-Ic-Subnet-Id":    []string{"subnet-id"},
+			"X-Ic-Cache-Status": []string{"BYPASS"},
+			"X-Ic-Retries":      []string{"0"},
+		},
+	}
+	host, _ := url.Parse("https://ic0.app")
+	a, err := New(Config{
+		ClientConfig: []ClientOption{
+			WithHostURL(host),
+			WithHttpClient(&http.Client{Transport: transport}),
+		},
+		DisableSignedQueryVerification: true,
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	query, err := a.PrepareQuery(principal.AnonymousID, "prepared", nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.Run("body_only", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			preparedQueryRawSink, err = query.QueryRawContext(context.Background(), false)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	b.Run("with_metadata", func(b *testing.B) {
+		b.ReportAllocs()
+		for b.Loop() {
+			preparedQueryRawSink, preparedQueryMetadataSink, err =
+				query.QueryRawContextWithMetadata(context.Background(), false)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
 type recordingQueryTransport struct {
 	mu       sync.Mutex
 	bodies   [][]byte
 	response []byte
+	headers  http.Header
+}
+
+type staticQueryTransport struct {
+	response []byte
+	headers  http.Header
+}
+
+func (t staticQueryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     t.headers,
+		Body:       io.NopCloser(bytes.NewReader(t.response)),
+		Request:    req,
+	}, nil
 }
 
 func (t *recordingQueryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -159,7 +284,7 @@ func (t *recordingQueryTransport) RoundTrip(req *http.Request) (*http.Response, 
 	t.mu.Unlock()
 	return &http.Response{
 		StatusCode: http.StatusOK,
-		Header:     make(http.Header),
+		Header:     t.headers.Clone(),
 		Body:       io.NopCloser(bytes.NewReader(t.response)),
 		Request:    req,
 	}, nil
