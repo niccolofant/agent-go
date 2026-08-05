@@ -115,6 +115,7 @@ type APIRequest[In, Out any] struct {
 	methodName          string
 	effectiveCanisterID principal.Principal
 	requestID           RequestID
+	ingressExpiry       uint64
 	data                []byte
 }
 
@@ -122,6 +123,13 @@ type APIRequest[In, Out any] struct {
 // Callers can durably journal it before submitting the signed envelope.
 func (c *APIRequest[In, Out]) RequestID() RequestID {
 	return c.requestID
+}
+
+// IngressExpiry returns the exact nanosecond timestamp signed into this
+// request's ingress envelope. Durable callers must use this value rather than
+// reconstructing expiry from a local timeout.
+func (c *APIRequest[In, Out]) IngressExpiry() time.Time {
+	return time.Unix(0, int64(c.ingressExpiry))
 }
 
 // CreateAPIRequest creates a new api request to the given canister and method using
@@ -146,13 +154,14 @@ func CreateAPIRequest[In, Out any](
 		return nil, err
 	}
 	nonce := newNonce()
+	ingressExpiry := a.expiryDate()
 	requestID, data, err := a.sign(Request{
 		Type:          typ,
 		Sender:        a.Sender(),
 		CanisterID:    canisterID,
 		MethodName:    methodName,
 		Arguments:     rawArgs,
-		IngressExpiry: a.expiryDate(),
+		IngressExpiry: ingressExpiry,
 		Nonce:         nonce,
 	})
 	if err != nil {
@@ -165,6 +174,7 @@ func CreateAPIRequest[In, Out any](
 		methodName:          methodName,
 		effectiveCanisterID: effectiveCanisterID,
 		requestID:           *requestID,
+		ingressExpiry:       ingressExpiry,
 		data:                data,
 	}, nil
 }

@@ -46,6 +46,9 @@ func TestPreparedQueryCanBeReusedConcurrently(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if query.IngressExpiry().IsZero() {
+		t.Fatal("prepared request has zero ingress expiry")
+	}
 
 	errs := make(chan error, fanout)
 	var wg sync.WaitGroup
