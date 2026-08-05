@@ -158,6 +158,7 @@ func TestPreparedQueryRawReturnsBoundaryMetadata(t *testing.T) {
 		t.Fatalf("raw reply = %q, want %q", got, rawArg)
 	}
 	want := HTTPResponseMetadata{
+		Host:              "ic0.app",
 		NodeID:            "replica-node",
 		SubnetID:          "subnet-id",
 		CacheStatus:       "BYPASS",

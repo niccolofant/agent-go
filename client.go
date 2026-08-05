@@ -45,7 +45,12 @@ type Client struct {
 // nodes. It is populated only by opt-in metadata methods so ordinary queries
 // do not pay for header extraction.
 type HTTPResponseMetadata struct {
-	NodeID            string
+	Host   string
+	NodeID string
+	// VerifiedNodeID is populated only when the response payload carries a
+	// replica signature that Agent verified. NodeID is routing telemetry from
+	// an HTTP header and must not be used as causal proof.
+	VerifiedNodeID    string
 	SubnetID          string
 	CacheStatus       string
 	CacheBypassReason string
@@ -68,29 +73,38 @@ func NewClient(options ...ClientOption) Client {
 }
 
 func (c Client) Call(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, error) {
+	body, _, err := c.CallWithMetadata(ctx, canisterID, data)
+	return body, err
+}
+
+// CallWithMetadata submits an update call and returns the API boundary routing
+// metadata for the response that accepted or synchronously completed it.
+func (c Client) CallWithMetadata(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, HTTPResponseMetadata, error) {
+	var metadata HTTPResponseMetadata
 	u, err := c.url(fmt.Sprintf("/api/%s/canister/%s/call", c.callVersion, canisterID.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	c.logger.Printf("[CLIENT] CALL %s", u)
 	req, err := c.newRequest(ctx, "POST", u, bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
+	metadata = responseMetadata(resp)
 	defer func() {
 		_ = resp.Body.Close()
 	}()
 	switch resp.StatusCode {
 	case http.StatusAccepted:
-		return nil, nil
+		return nil, metadata, nil
 	case http.StatusOK:
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return nil, metadata, err
 		}
 		var reply struct {
 			Status      string `cbor:"status"`
@@ -100,26 +114,26 @@ func (c Client) Call(ctx context.Context, canisterID principal.Principal, data [
 			ErrorCode   string `cbor:"error_code"`
 		}
 		if err := cbor.Unmarshal(body, &reply); err != nil {
-			return nil, err
+			return nil, metadata, err
 		}
 		switch reply.Status {
 		case "replied":
-			return reply.Certificate, nil
+			return reply.Certificate, metadata, nil
 		case "non_replicated_rejection":
-			return nil, preprocessingError{
+			return nil, metadata, preprocessingError{
 				RejectCode: reply.RejectCode,
 				Message:    reply.Message,
 				ErrorCode:  reply.ErrorCode,
 			}
 		default:
-			return nil, fmt.Errorf("unknown status: %s", reply.Status)
+			return nil, metadata, fmt.Errorf("unknown status: %s", reply.Status)
 		}
 	default:
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, err
+			return nil, metadata, err
 		}
-		return nil, fmt.Errorf("(%d) %s: %s", resp.StatusCode, resp.Status, body)
+		return nil, metadata, fmt.Errorf("(%d) %s: %s", resp.StatusCode, resp.Status, body)
 	}
 }
 
@@ -135,6 +149,12 @@ func (c Client) QueryWithMetadata(ctx context.Context, canisterID principal.Prin
 
 func (c Client) ReadState(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, error) {
 	return c.post(ctx, c.readStateVersion, "read_state", canisterID, data)
+}
+
+// ReadStateWithMetadata executes read_state and returns the responder metadata
+// alongside the certified response.
+func (c Client) ReadStateWithMetadata(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, HTTPResponseMetadata, error) {
+	return c.postWithMetadata(ctx, c.readStateVersion, "read_state", canisterID, data)
 }
 
 func (c Client) ReadSubnetState(ctx context.Context, subnetID principal.Principal, data []byte) ([]byte, error) {
@@ -218,7 +238,7 @@ func (c Client) postResponse(
 		_ = resp.Body.Close()
 	}()
 	if withMetadata {
-		metadata = responseMetadata(resp.Header)
+		metadata = responseMetadata(resp)
 	}
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -233,8 +253,10 @@ func (c Client) postResponse(
 	}
 }
 
-func responseMetadata(headers http.Header) HTTPResponseMetadata {
+func responseMetadata(resp *http.Response) HTTPResponseMetadata {
+	headers := resp.Header
 	metadata := HTTPResponseMetadata{
+		Host:              resp.Request.URL.Host,
 		NodeID:            headers.Get(headerICNodeID),
 		SubnetID:          headers.Get(headerICSubnetID),
 		CacheStatus:       headers.Get(headerICCacheStatus),

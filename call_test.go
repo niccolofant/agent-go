@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -41,8 +42,15 @@ func TestCallAndWaitV4UsesVerifiedCertificate(t *testing.T) {
 
 	var got []byte
 	request := callTestRequest(a, requestID)
-	if err := request.CallAndWaitWithContext(context.Background(), &got); err != nil {
+	metadata, err := request.CallAndWaitWithContextAndMetadata(context.Background(), &got)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if metadata.RequestID != requestID {
+		t.Fatalf("request id = %x, want %x", metadata.RequestID, requestID)
+	}
+	if metadata.Response.VerifiedNodeID != "" {
+		t.Fatalf("read_state/call response must not claim a verified replica: %+v", metadata.Response)
 	}
 	if string(got) != string(reply) {
 		t.Fatalf("reply = %q, want %q", got, reply)
@@ -101,8 +109,12 @@ func TestCallAndWaitV4InvalidCertificateFallsBackToPoll(t *testing.T) {
 
 			var got []byte
 			request := callTestRequest(a, requestID)
-			if err := request.CallAndWaitWithContext(context.Background(), &got); err != nil {
+			metadata, err := request.CallAndWaitWithContextAndMetadata(context.Background(), &got)
+			if err != nil {
 				t.Fatal(err)
+			}
+			if metadata.RequestID != requestID {
+				t.Fatalf("request id = %x, want %x", metadata.RequestID, requestID)
 			}
 			if string(got) != string(reply) {
 				t.Fatalf("reply = %q, want %q", got, reply)
@@ -112,6 +124,123 @@ func TestCallAndWaitV4InvalidCertificateFallsBackToPoll(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCallAndWaitAcceptedResponseReturnsPolledMetadata(t *testing.T) {
+	requestID := RequestID{10, 11, 12}
+	reply := []byte("accepted then polled")
+	signer, rootKey := callCertificateSigner(t)
+	certificate := signedCallCertificate(t, signer, requestID, reply, time.Now())
+	rawCertificate := marshalCertificate(t, certificate)
+
+	a := callTestAgent(t, rootKey, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case hasPathSuffix(r.URL.Path, "/call"):
+			w.WriteHeader(http.StatusAccepted)
+		case hasPathSuffix(r.URL.Path, "/read_state"):
+			w.Header().Set(headerICSubnetID, "subnet-polled")
+			writeCBOR(t, w, map[string]any{"certificate": rawCertificate})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	var got []byte
+	metadata, err := callTestRequest(a, requestID).
+		CallAndWaitWithContextAndMetadata(context.Background(), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.RequestID != requestID || metadata.Response.SubnetID != "subnet-polled" {
+		t.Fatalf("metadata = %+v", metadata)
+	}
+	if string(got) != string(reply) {
+		t.Fatalf("reply = %q, want %q", got, reply)
+	}
+}
+
+func TestCallAndWaitTransientSubmissionRecoversByRequestID(t *testing.T) {
+	requestID := RequestID{13, 14, 15}
+	reply := []byte("transient recovered")
+	signer, rootKey := callCertificateSigner(t)
+	certificate := signedCallCertificate(t, signer, requestID, reply, time.Now())
+	rawCertificate := marshalCertificate(t, certificate)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !hasPathSuffix(r.URL.Path, "/read_state") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set(headerICSubnetID, "subnet-recovered")
+		writeCBOR(t, w, map[string]any{"certificate": rawCertificate})
+	}))
+	t.Cleanup(server.Close)
+	host, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := New(Config{
+		ClientConfig: []ClientOption{
+			WithHostURL(host),
+			WithHttpClient(&http.Client{Transport: transientCallTransport{base: http.DefaultTransport}}),
+		},
+		IngressExpiry:    5 * time.Minute,
+		PollDelay:        time.Millisecond,
+		PollTimeout:      time.Second,
+		ReadStateTimeout: time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.rootKey = rootKey
+
+	var got []byte
+	metadata, err := callTestRequest(a, requestID).
+		CallAndWaitWithContextAndMetadata(context.Background(), &got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.RequestID != requestID || metadata.Response.SubnetID != "subnet-recovered" {
+		t.Fatalf("metadata = %+v", metadata)
+	}
+	if string(got) != string(reply) {
+		t.Fatalf("reply = %q, want %q", got, reply)
+	}
+}
+
+func TestWaitForRequestStatusWithMetadataResumesPersistedRequest(t *testing.T) {
+	requestID := RequestID{16, 17, 18}
+	reply := []byte("restored request")
+	signer, rootKey := callCertificateSigner(t)
+	certificate := signedCallCertificate(t, signer, requestID, reply, time.Now())
+	rawCertificate := marshalCertificate(t, certificate)
+	a := callTestAgent(t, rootKey, func(w http.ResponseWriter, r *http.Request) {
+		if !hasPathSuffix(r.URL.Path, "/read_state") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set(headerICSubnetID, "subnet-restored")
+		writeCBOR(t, w, map[string]any{"certificate": rawCertificate})
+	})
+
+	got, metadata, err := a.WaitForRequestStatusWithMetadata(
+		context.Background(), principal.AnonymousID, requestID,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metadata.SubnetID != "subnet-restored" || string(got) != string(reply) {
+		t.Fatalf("reply=%q metadata=%+v", got, metadata)
+	}
+}
+
+type transientCallTransport struct{ base http.RoundTripper }
+
+func (t transientCallTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if hasPathSuffix(request.URL.Path, "/call") {
+		return nil, io.ErrUnexpectedEOF
+	}
+	return t.base.RoundTrip(request)
 }
 
 func BenchmarkVerifySynchronousCallCertificate(b *testing.B) {

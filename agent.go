@@ -118,6 +118,12 @@ type APIRequest[In, Out any] struct {
 	data                []byte
 }
 
+// RequestID returns the stable ingress request id of this prepared request.
+// Callers can durably journal it before submitting the signed envelope.
+func (c *APIRequest[In, Out]) RequestID() RequestID {
+	return c.requestID
+}
+
 // CreateAPIRequest creates a new api request to the given canister and method using
 // a caller-supplied codec. Use this when neither Candid nor Protobuf fits and the
 // pre-built CallRaw/QueryRaw helpers force an unwanted extra []byte hop.
@@ -404,15 +410,39 @@ func (a Agent) RequestStatus(ecID principal.Principal, requestID RequestID) ([]b
 	return a.requestStatus(a.ctx, ecID, requestID)
 }
 
+// WaitForRequestStatus waits for a previously submitted ingress request to
+// reach a certified terminal state. It is intended for durable callers that
+// restore a request ID after a process restart.
+func (a Agent) WaitForRequestStatus(ecID principal.Principal, requestID RequestID) ([]byte, error) {
+	return a.poll(a.ctx, ecID, requestID)
+}
+
+// WaitForRequestStatusWithMetadata is WaitForRequestStatus with an explicit
+// context and the HTTP route metadata of the terminal certified read_state
+// response. The returned metadata identifies the route, not an individual
+// replica signer.
+func (a Agent) WaitForRequestStatusWithMetadata(
+	ctx context.Context,
+	ecID principal.Principal,
+	requestID RequestID,
+) ([]byte, HTTPResponseMetadata, error) {
+	return a.pollWithMetadata(ctx, ecID, requestID)
+}
+
 // Sender returns the principal that is sending the requests.
 func (a Agent) Sender() principal.Principal {
 	return a.sender
 }
 
 func (a Agent) call(ctx context.Context, ecID principal.Principal, data []byte) ([]byte, error) {
+	raw, _, err := a.callWithMetadata(ctx, ecID, data)
+	return raw, err
+}
+
+func (a Agent) callWithMetadata(ctx context.Context, ecID principal.Principal, data []byte) ([]byte, HTTPResponseMetadata, error) {
 	ctx, cancel := context.WithTimeout(ctx, a.ingressExpiry)
 	defer cancel()
-	return a.client.Call(ctx, ecID, data)
+	return a.client.CallWithMetadata(ctx, ecID, data)
 }
 
 func (a Agent) expiryDate() uint64 {
@@ -420,6 +450,12 @@ func (a Agent) expiryDate() uint64 {
 }
 
 func (a Agent) poll(ctx context.Context, ecID principal.Principal, requestID RequestID) ([]byte, error) {
+	raw, _, err := a.pollWithMetadata(ctx, ecID, requestID)
+	return raw, err
+}
+
+func (a Agent) pollWithMetadata(ctx context.Context, ecID principal.Principal, requestID RequestID) ([]byte, HTTPResponseMetadata, error) {
+	var metadata HTTPResponseMetadata
 	if ctx == nil {
 		ctx = a.ctx
 	}
@@ -430,9 +466,9 @@ func (a Agent) poll(ctx context.Context, ecID principal.Principal, requestID Req
 
 	for {
 		a.logger.Printf("[AGENT] POLL %s %x", ecID, requestID)
-		data, node, err := a.requestStatus(ctx, ecID, requestID)
+		data, node, responder, err := a.requestStatusWithMetadata(ctx, ecID, requestID)
 		if err != nil {
-			return nil, err
+			return nil, metadata, err
 		}
 		if len(data) != 0 {
 			path := []hashtree.Label{hashtree.Label("request_status"), requestID[:]}
@@ -440,45 +476,51 @@ func (a Agent) poll(ctx context.Context, ecID principal.Principal, requestID Req
 			case "replied":
 				replied, err := hashtree.Lookup(node, append(path, hashtree.Label("reply"))...)
 				if err != nil {
-					return nil, fmt.Errorf("no reply found")
+					return nil, metadata, fmt.Errorf("no reply found")
 				}
-				return replied, nil
+				return replied, responder, nil
 			case "rejected":
 				tree := hashtree.NewHashTree(node)
 				code, err := tree.Lookup(append(path, hashtree.Label("reject_code"))...)
 				if err != nil {
-					return nil, err
+					return nil, metadata, err
 				}
 				message, err := tree.Lookup(append(path, hashtree.Label("reject_message"))...)
 				if err != nil {
-					return nil, err
+					return nil, metadata, err
 				}
-				return nil, fmt.Errorf("(%d) %s", uint64FromBytes(code), string(message))
+				return nil, responder, fmt.Errorf("(%d) %s", uint64FromBytes(code), string(message))
 			}
 		}
 
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, metadata, ctx.Err()
 		case <-ticker.C:
 		case <-timer.C:
-			return nil, fmt.Errorf("out of time... waited %d seconds", a.timeout/time.Second)
+			return nil, metadata, fmt.Errorf("out of time... waited %d seconds", a.timeout/time.Second)
 		}
 	}
 }
 
 func (a Agent) readState(ctx context.Context, ecID principal.Principal, data []byte) (map[string][]byte, error) {
+	resp, _, err := a.readStateWithMetadata(ctx, ecID, data)
+	return resp, err
+}
+
+func (a Agent) readStateWithMetadata(ctx context.Context, ecID principal.Principal, data []byte) (map[string][]byte, HTTPResponseMetadata, error) {
+	var metadata HTTPResponseMetadata
 	if ctx == nil {
 		ctx = a.ctx
 	}
 	ctx, cancel := context.WithTimeout(ctx, a.readStateTimeout)
 	defer cancel()
-	resp, err := a.client.ReadState(ctx, ecID, data)
+	resp, metadata, err := a.client.ReadStateWithMetadata(ctx, ecID, data)
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	var m map[string][]byte
-	return m, cbor.Unmarshal(resp, &m)
+	return m, metadata, cbor.Unmarshal(resp, &m)
 }
 
 func (a Agent) readStateContext(ctx context.Context, ecID principal.Principal, data []byte) (map[string][]byte, error) {
@@ -486,6 +528,12 @@ func (a Agent) readStateContext(ctx context.Context, ecID principal.Principal, d
 }
 
 func (a Agent) readStateCertificate(ctx context.Context, ecID principal.Principal, paths [][]hashtree.Label) (*certification.Certificate, error) {
+	certificate, _, err := a.readStateCertificateWithMetadata(ctx, ecID, paths)
+	return certificate, err
+}
+
+func (a Agent) readStateCertificateWithMetadata(ctx context.Context, ecID principal.Principal, paths [][]hashtree.Label) (*certification.Certificate, HTTPResponseMetadata, error) {
+	var metadata HTTPResponseMetadata
 	_, data, err := a.sign(Request{
 		Type:          RequestTypeReadState,
 		Sender:        a.Sender(),
@@ -493,24 +541,24 @@ func (a Agent) readStateCertificate(ctx context.Context, ecID principal.Principa
 		IngressExpiry: a.expiryDate(),
 	})
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	a.logger.Printf("[AGENT] READ STATE %s (ecID)", ecID)
-	resp, err := a.readState(ctx, ecID, data)
+	resp, metadata, err := a.readStateWithMetadata(ctx, ecID, data)
 	if err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	var certificate certification.Certificate
 	if err := cbor.Unmarshal(resp["certificate"], &certificate); err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	if err := certificate.VerifyTime(a.ingressExpiry); err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
 	if err := certification.VerifyCertificate(certificate, ecID, a.rootKey); err != nil {
-		return nil, err
+		return nil, metadata, err
 	}
-	return &certificate, nil
+	return &certificate, metadata, nil
 }
 
 func (a Agent) readStateCertificateContext(ctx context.Context, ecID principal.Principal, paths [][]hashtree.Label) (*certification.Certificate, error) {
@@ -565,13 +613,20 @@ func (a Agent) ReadSubnetStateCertificateContext(ctx context.Context, subnetID p
 }
 
 func (a Agent) requestStatus(ctx context.Context, ecID principal.Principal, requestID RequestID) ([]byte, hashtree.Node, error) {
+	data, node, _, err := a.requestStatusWithMetadata(ctx, ecID, requestID)
+	return data, node, err
+}
+
+func (a Agent) requestStatusWithMetadata(ctx context.Context, ecID principal.Principal, requestID RequestID) ([]byte, hashtree.Node, HTTPResponseMetadata, error) {
+	var metadata HTTPResponseMetadata
 	a.logger.Printf("[AGENT] REQUEST STATUS %s %x", ecID, requestID)
 	path := []hashtree.Label{hashtree.Label("request_status"), requestID[:]}
-	certificate, err := a.readStateCertificate(ctx, ecID, [][]hashtree.Label{path})
+	certificate, metadata, err := a.readStateCertificateWithMetadata(ctx, ecID, [][]hashtree.Label{path})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, metadata, err
 	}
-	return handleStatus(path, certificate)
+	data, node, err := handleStatus(path, certificate)
+	return data, node, metadata, err
 }
 
 func (a Agent) sign(request Request) (*RequestID, []byte, error) {
