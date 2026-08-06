@@ -156,9 +156,6 @@ func (q APIRequest[In, Out]) queryRawContext(
 				panic("unreachable")
 			}
 		}
-		if len(resp.Signatures) == 1 {
-			metadata.VerifiedNodeID = resp.Signatures[0].Identity.Encode()
-		}
 	}
 	switch resp.Status {
 	case "replied":

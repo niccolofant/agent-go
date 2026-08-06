@@ -11,22 +11,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// CallResponseMetadata identifies the signed ingress request and carries the
-// HTTP route metadata of its terminal status response. A read_state certificate
-// proves subnet state, not an individual replica, so Response.VerifiedNodeID is
-// intentionally empty for update completion.
-type CallResponseMetadata struct {
-	RequestID RequestID
-	Response  HTTPResponseMetadata
-}
-
-// PrepareCall encodes and signs a Candid update without submitting it. The
-// caller may persist RequestID before invoking CallAndWaitWithContext on the
-// returned immutable request.
-func (a *Agent) PrepareCall(canisterID principal.Principal, methodName string, in []any) (*CandidAPIRequest, error) {
-	return a.CreateCandidAPIRequest(RequestTypeCall, canisterID, methodName, in...)
-}
-
 // CallAndWait calls a method on a canister and waits for the result.
 func (c APIRequest[_, Out]) CallAndWait(out Out) error {
 	return c.CallAndWaitWithContext(c.a.ctx, out)
@@ -36,20 +20,11 @@ func (c APIRequest[_, Out]) CallAndWait(out Out) error {
 // of the per-request timeouts and the polling loop, letting the caller cancel an
 // in-flight update call.
 func (c APIRequest[_, Out]) CallAndWaitWithContext(ctx context.Context, out Out) error {
-	_, err := c.CallAndWaitWithContextAndMetadata(ctx, out)
-	return err
-}
-
-// CallAndWaitWithContextAndMetadata is CallAndWaitWithContext plus the request
-// id and terminal HTTP route metadata. The route is useful for diagnostics and
-// directed follow-up reads, but is not itself cryptographic replica identity.
-func (c APIRequest[_, Out]) CallAndWaitWithContextAndMetadata(ctx context.Context, out Out) (CallResponseMetadata, error) {
-	metadata := CallResponseMetadata{RequestID: c.requestID}
 	c.a.logger.Printf("[AGENT] CALL %s %s (%x)", c.effectiveCanisterID, c.methodName, c.requestID)
-	rawCertificate, responder, err := c.a.callWithMetadata(ctx, c.effectiveCanisterID, c.data)
+	rawCertificate, err := c.a.call(ctx, c.effectiveCanisterID, c.data)
 	if err != nil {
 		if !isTransientError(err) {
-			return metadata, err
+			return err
 		}
 		// EOF/transient: fall through to poll to check if it went through
 		rawCertificate = nil
@@ -73,8 +48,7 @@ func (c APIRequest[_, Out]) CallAndWaitWithContextAndMetadata(ctx context.Contex
 		}
 		path := []hashtree.Label{hashtree.Label("request_status"), c.requestID[:]}
 		if raw, err := certificate.Tree.Lookup(append(path, hashtree.Label("reply"))...); err == nil {
-			metadata.Response = responder
-			return metadata, c.unmarshal(raw, out)
+			return c.unmarshal(raw, out)
 		}
 
 		rejectCode, err := certificate.Tree.Lookup(append(path, hashtree.Label("reject_code"))...)
@@ -84,8 +58,7 @@ func (c APIRequest[_, Out]) CallAndWaitWithContextAndMetadata(ctx context.Contex
 		}
 		message, _ := certificate.Tree.Lookup(append(path, hashtree.Label("reject_message"))...)
 		errorCode, _ := certificate.Tree.Lookup(append(path, hashtree.Label("error_code"))...)
-		metadata.Response = responder
-		return metadata, preprocessingError{
+		return preprocessingError{
 			RejectCode: uint64FromBytes(rejectCode),
 			Message:    string(message),
 			ErrorCode:  string(errorCode),
@@ -93,12 +66,11 @@ func (c APIRequest[_, Out]) CallAndWaitWithContextAndMetadata(ctx context.Contex
 	}
 
 poll:
-	raw, responder, err := c.a.pollWithMetadata(ctx, c.effectiveCanisterID, c.requestID)
+	raw, err := c.a.poll(ctx, c.effectiveCanisterID, c.requestID)
 	if err != nil {
-		return metadata, err
+		return err
 	}
-	metadata.Response = responder
-	return metadata, c.unmarshal(raw, out)
+	return c.unmarshal(raw, out)
 }
 
 // Call calls a method on a canister and unmarshals the result into the given values.
