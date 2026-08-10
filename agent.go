@@ -423,18 +423,26 @@ func (a Agent) poll(ctx context.Context, ecID principal.Principal, requestID Req
 	if ctx == nil {
 		ctx = a.ctx
 	}
+	pollCtx, cancel := context.WithTimeout(ctx, a.timeout)
+	defer cancel()
+
 	ticker := time.NewTicker(a.delay)
 	defer ticker.Stop()
-	timer := time.NewTimer(a.timeout)
-	defer timer.Stop()
 
 	for {
 		a.logger.Printf("[AGENT] POLL %s %x", ecID, requestID)
-		data, node, err := a.requestStatus(ctx, ecID, requestID)
+		data, node, err := a.requestStatus(pollCtx, ecID, requestID)
 		if err != nil {
-			return nil, err
-		}
-		if len(data) != 0 {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if pollCtx.Err() != nil {
+				return nil, fmt.Errorf("out of time... waited %d seconds", a.timeout/time.Second)
+			}
+			if !isTransientError(err) {
+				return nil, err
+			}
+		} else if len(data) != 0 {
 			path := []hashtree.Label{hashtree.Label("request_status"), requestID[:]}
 			switch string(data) {
 			case "replied":
@@ -460,9 +468,12 @@ func (a Agent) poll(ctx context.Context, ecID principal.Principal, requestID Req
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-ticker.C:
-		case <-timer.C:
+		case <-pollCtx.Done():
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			return nil, fmt.Errorf("out of time... waited %d seconds", a.timeout/time.Second)
+		case <-ticker.C:
 		}
 	}
 }

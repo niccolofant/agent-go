@@ -119,7 +119,7 @@ func (c Client) Call(ctx context.Context, canisterID principal.Principal, data [
 		if err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("(%d) %s: %s", resp.StatusCode, resp.Status, body)
+		return nil, &httpStatusError{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
 	}
 }
 
@@ -229,7 +229,7 @@ func (c Client) postResponse(
 		if err != nil {
 			return nil, metadata, err
 		}
-		return nil, metadata, fmt.Errorf("(%d) %s: %s", resp.StatusCode, resp.Status, body)
+		return nil, metadata, &httpStatusError{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
 	}
 }
 
@@ -271,8 +271,18 @@ func (c Client) postSubnet(ctx context.Context, path string, subnetID principal.
 		if err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("(%d) %s: %s", resp.StatusCode, resp.Status, body)
+		return nil, &httpStatusError{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
 	}
+}
+
+type httpStatusError struct {
+	StatusCode int
+	Status     string
+	Body       []byte
+}
+
+func (e *httpStatusError) Error() string {
+	return fmt.Sprintf("(%d) %s: %s", e.StatusCode, e.Status, e.Body)
 }
 
 func (c Client) url(p string) (string, error) {

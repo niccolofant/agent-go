@@ -2,6 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net"
 	"strings"
 
 	"github.com/fxamacker/cbor/v2"
@@ -135,11 +138,22 @@ func isTransientError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "EOF") ||
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	var statusErr *httpStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.StatusCode == 408 || statusErr.StatusCode == 429 || statusErr.StatusCode >= 500
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "eof") ||
 		strings.Contains(msg, "connection reset") ||
 		strings.Contains(msg, "broken pipe") ||
 		strings.Contains(msg, "timeout") ||
 		strings.Contains(msg, "temporary") ||
-		strings.Contains(msg, "TLS handshake")
+		strings.Contains(msg, "tls handshake")
 }

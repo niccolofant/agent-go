@@ -2,10 +2,12 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -111,6 +113,139 @@ func TestCallAndWaitV4InvalidCertificateFallsBackToPoll(t *testing.T) {
 				t.Fatalf("read_state polls = %d, want 1", got)
 			}
 		})
+	}
+}
+
+func TestCallAndWaitRetriesTransientReadStateFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		first func(http.ResponseWriter, *http.Request)
+	}{
+		{
+			name: "deadline exceeded",
+			first: func(_ http.ResponseWriter, _ *http.Request) {
+				time.Sleep(50 * time.Millisecond)
+			},
+		},
+		{
+			name: "unexpected EOF",
+			first: func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Length", "128")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte{0xa1})
+			},
+		},
+		{
+			name: "service unavailable",
+			first: func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "try another boundary node", http.StatusServiceUnavailable)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requestID := RequestID{10, 11, 12}
+			reply := []byte("polled after retry")
+			signer, rootKey := callCertificateSigner(t)
+			certificate := signedCallCertificate(t, signer, requestID, reply, time.Now())
+			rawCertificate := marshalCertificate(t, certificate)
+
+			var calls atomic.Int32
+			var polls atomic.Int32
+			a := callTestAgent(t, rootKey, func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case hasPathSuffix(r.URL.Path, "/call"):
+					calls.Add(1)
+					w.WriteHeader(http.StatusAccepted)
+				case hasPathSuffix(r.URL.Path, "/read_state"):
+					if polls.Add(1) == 1 {
+						tc.first(w, r)
+						return
+					}
+					writeCBOR(t, w, map[string]any{"certificate": rawCertificate})
+				default:
+					http.NotFound(w, r)
+				}
+			})
+			a.readStateTimeout = 20 * time.Millisecond
+
+			var got []byte
+			request := callTestRequest(a, requestID)
+			if err := request.CallAndWaitWithContext(context.Background(), &got); err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != string(reply) {
+				t.Fatalf("reply = %q, want %q", got, reply)
+			}
+			if got := calls.Load(); got != 1 {
+				t.Fatalf("update submissions = %d, want 1", got)
+			}
+			if got := polls.Load(); got != 2 {
+				t.Fatalf("read_state polls = %d, want 2", got)
+			}
+		})
+	}
+}
+
+func TestCallAndWaitTransientReadStateFailuresRespectPollBudget(t *testing.T) {
+	requestID := RequestID{13, 14, 15}
+	var calls atomic.Int32
+	var polls atomic.Int32
+	a := callTestAgent(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case hasPathSuffix(r.URL.Path, "/call"):
+			calls.Add(1)
+			w.WriteHeader(http.StatusAccepted)
+		case hasPathSuffix(r.URL.Path, "/read_state"):
+			polls.Add(1)
+			time.Sleep(30 * time.Millisecond)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	a.readStateTimeout = 15 * time.Millisecond
+	a.timeout = 75 * time.Millisecond
+	a.delay = time.Millisecond
+
+	started := time.Now()
+	err := callTestRequest(a, requestID).CallAndWaitWithContext(context.Background(), new([]byte))
+	if err == nil || !strings.Contains(err.Error(), "out of time") {
+		t.Fatalf("error = %v, want poll timeout", err)
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("poll returned after %v, want bounded by overall budget", elapsed)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("update submissions = %d, want 1", got)
+	}
+	if got := polls.Load(); got < 2 {
+		t.Fatalf("read_state polls = %d, want at least 2", got)
+	}
+}
+
+func TestCallAndWaitDoesNotRetryNonTransientReadStateFailure(t *testing.T) {
+	requestID := RequestID{16, 17, 18}
+	var polls atomic.Int32
+	a := callTestAgent(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case hasPathSuffix(r.URL.Path, "/call"):
+			w.WriteHeader(http.StatusAccepted)
+		case hasPathSuffix(r.URL.Path, "/read_state"):
+			polls.Add(1)
+			http.Error(w, "invalid request", http.StatusBadRequest)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
+	err := callTestRequest(a, requestID).CallAndWaitWithContext(context.Background(), new([]byte))
+	if err == nil || !strings.Contains(err.Error(), "400 Bad Request") {
+		t.Fatalf("error = %v, want HTTP 400", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want non-transient HTTP failure", err)
+	}
+	if got := polls.Load(); got != 1 {
+		t.Fatalf("read_state polls = %d, want 1", got)
 	}
 }
 
