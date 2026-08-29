@@ -163,6 +163,7 @@ func TestPreparedQueryRawReturnsBoundaryMetadata(t *testing.T) {
 		CacheStatus:       "BYPASS",
 		CacheBypassReason: "nonce",
 		Retries:           2,
+		StatusCode:        http.StatusOK,
 	}
 	if metadata != want {
 		t.Fatalf("metadata = %+v, want %+v", metadata, want)

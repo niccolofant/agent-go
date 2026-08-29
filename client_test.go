@@ -2,10 +2,12 @@ package agent_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/niccolofant/agent-go"
@@ -52,6 +54,18 @@ func TestClientReadStateDefaultsToV3(t *testing.T) {
 	}
 }
 
+func TestClientQueryDefaultsToV3(t *testing.T) {
+	c, gotPath := recordingClient(t)
+	cid := principal.MustDecode("aaaaa-aa")
+	if _, err := c.Query(context.Background(), cid, nil); err != nil {
+		t.Fatal(err)
+	}
+	want := "/api/v3/canister/" + cid.Encode() + "/query"
+	if *gotPath != want {
+		t.Fatalf("got %q, want %q", *gotPath, want)
+	}
+}
+
 func TestClientLegacyAPI(t *testing.T) {
 	cid := principal.MustDecode("aaaaa-aa")
 
@@ -69,5 +83,41 @@ func TestClientLegacyAPI(t *testing.T) {
 	}
 	if want := "/api/v2/canister/" + cid.Encode() + "/read_state"; *readPath != want {
 		t.Fatalf("read_state: got %q, want %q", *readPath, want)
+	}
+
+	cQuery, queryPath := recordingClient(t, agent.WithLegacyAPI())
+	if _, err := cQuery.Query(context.Background(), cid, nil); err != nil {
+		t.Fatal(err)
+	}
+	if want := "/api/v2/canister/" + cid.Encode() + "/query"; *queryPath != want {
+		t.Fatalf("query: got %q, want %q", *queryPath, want)
+	}
+}
+
+type throttledHTTPError interface {
+	HTTPStatusCode() int
+	RetryAfter() time.Duration
+}
+
+func TestQueryMetadataExposesRetryAfterAndStatusError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "3")
+		http.Error(w, "busy", http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	host, _ := url.Parse(srv.URL)
+	c := agent.NewClient(agent.WithHostURL(host))
+	cid := principal.MustDecode("aaaaa-aa")
+	_, metadata, err := c.QueryWithMetadata(context.Background(), cid, nil)
+	if err == nil {
+		t.Fatal("429 query unexpectedly succeeded")
+	}
+	if metadata.StatusCode != http.StatusTooManyRequests || metadata.RetryAfter != 3*time.Second {
+		t.Fatalf("metadata=%+v", metadata)
+	}
+	var throttled throttledHTTPError
+	if !errors.As(err, &throttled) || throttled.HTTPStatusCode() != http.StatusTooManyRequests ||
+		throttled.RetryAfter() != 3*time.Second {
+		t.Fatalf("error=%T %v", err, err)
 	}
 }

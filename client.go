@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path"
 	"strconv"
+	"time"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/niccolofant/agent-go/principal"
@@ -33,11 +34,12 @@ type Client struct {
 	client *http.Client
 	routes RouteProvider
 	logger Logger
-	// callVersion / readStateVersion select the API version segment of the
-	// call and read_state endpoints. The defaults certify canister ranges
+	// callVersion / queryVersion / readStateVersion select the API version
+	// segment of the corresponding endpoints. The defaults certify canister ranges
 	// under the sharded /canister_ranges/<subnet_id> layout; legacy uses the
 	// deprecated /subnet/<subnet_id>/canister_ranges layout.
 	callVersion      string
+	queryVersion     string
 	readStateVersion string
 }
 
@@ -50,6 +52,8 @@ type HTTPResponseMetadata struct {
 	CacheStatus       string
 	CacheBypassReason string
 	Retries           int
+	StatusCode        int
+	RetryAfter        time.Duration
 }
 
 // NewClient creates a new client based on the given configuration.
@@ -59,6 +63,7 @@ func NewClient(options ...ClientOption) Client {
 		routes:           StaticRoute(icp0),
 		logger:           new(NoopLogger),
 		callVersion:      "v4",
+		queryVersion:     "v3",
 		readStateVersion: "v3",
 	}
 	for _, o := range options {
@@ -124,13 +129,13 @@ func (c Client) Call(ctx context.Context, canisterID principal.Principal, data [
 }
 
 func (c Client) Query(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, error) {
-	return c.post(ctx, "v2", "query", canisterID, data)
+	return c.post(ctx, c.queryVersion, "query", canisterID, data)
 }
 
 // QueryWithMetadata executes a query and returns API boundary routing metadata
 // alongside the raw CBOR response.
 func (c Client) QueryWithMetadata(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, HTTPResponseMetadata, error) {
-	return c.postWithMetadata(ctx, "v2", "query", canisterID, data)
+	return c.postWithMetadata(ctx, c.queryVersion, "query", canisterID, data)
 }
 
 func (c Client) ReadState(ctx context.Context, canisterID principal.Principal, data []byte) ([]byte, error) {
@@ -219,6 +224,8 @@ func (c Client) postResponse(
 	}()
 	if withMetadata {
 		metadata = responseMetadata(resp.Header)
+		metadata.StatusCode = resp.StatusCode
+		metadata.RetryAfter = retryAfter(resp.Header, time.Now())
 	}
 	switch resp.StatusCode {
 	case http.StatusOK:
@@ -229,7 +236,7 @@ func (c Client) postResponse(
 		if err != nil {
 			return nil, metadata, err
 		}
-		return nil, metadata, &httpStatusError{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+		return nil, metadata, newHTTPStatusError(resp, body)
 	}
 }
 
@@ -271,7 +278,7 @@ func (c Client) postSubnet(ctx context.Context, path string, subnetID principal.
 		if err != nil {
 			return nil, err
 		}
-		return nil, &httpStatusError{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+		return nil, newHTTPStatusError(resp, body)
 	}
 }
 
@@ -279,10 +286,44 @@ type httpStatusError struct {
 	StatusCode int
 	Status     string
 	Body       []byte
+	RetryDelay time.Duration
 }
 
 func (e *httpStatusError) Error() string {
 	return fmt.Sprintf("(%d) %s: %s", e.StatusCode, e.Status, e.Body)
+}
+
+// HTTPStatusCode and RetryAfter let callers implement endpoint cooldowns
+// without depending on the concrete (intentionally private) error type.
+func (e *httpStatusError) HTTPStatusCode() int { return e.StatusCode }
+
+func (e *httpStatusError) RetryAfter() time.Duration { return e.RetryDelay }
+
+func newHTTPStatusError(resp *http.Response, body []byte) *httpStatusError {
+	return &httpStatusError{
+		StatusCode: resp.StatusCode,
+		Status:     resp.Status,
+		Body:       body,
+		RetryDelay: retryAfter(resp.Header, time.Now()),
+	}
+}
+
+func retryAfter(headers http.Header, now time.Time) time.Duration {
+	raw := headers.Get("Retry-After")
+	if raw == "" {
+		return 0
+	}
+	if seconds, err := strconv.ParseInt(raw, 10, 64); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds) * time.Second
+	}
+	when, err := http.ParseTime(raw)
+	if err != nil || !when.After(now) {
+		return 0
+	}
+	return when.Sub(now)
 }
 
 func (c Client) url(p string) (string, error) {
@@ -315,11 +356,12 @@ func WithLogger(logger Logger) ClientOption {
 	}
 }
 
-// WithLegacyAPI uses the deprecated /api/v3 call and /api/v2 read_state
-// endpoints instead of the defaults (/api/v4 call, /api/v3 read_state).
+// WithLegacyAPI uses the deprecated /api/v3 call and /api/v2 query/read_state
+// endpoints instead of the defaults (/api/v4 call, /api/v3 query/read_state).
 func WithLegacyAPI() ClientOption {
 	return func(c *Client) {
 		c.callVersion = "v3"
+		c.queryVersion = "v2"
 		c.readStateVersion = "v2"
 	}
 }
