@@ -115,6 +115,7 @@ type APIRequest[In, Out any] struct {
 	methodName          string
 	effectiveCanisterID principal.Principal
 	requestID           RequestID
+	ingressExpiry       uint64
 	data                []byte
 }
 
@@ -140,13 +141,14 @@ func CreateAPIRequest[In, Out any](
 		return nil, err
 	}
 	nonce := newNonce()
+	ingressExpiry := a.expiryDate()
 	requestID, data, err := a.sign(Request{
 		Type:          typ,
 		Sender:        a.Sender(),
 		CanisterID:    canisterID,
 		MethodName:    methodName,
 		Arguments:     rawArgs,
-		IngressExpiry: a.expiryDate(),
+		IngressExpiry: ingressExpiry,
 		Nonce:         nonce,
 	})
 	if err != nil {
@@ -159,8 +161,22 @@ func CreateAPIRequest[In, Out any](
 		methodName:          methodName,
 		effectiveCanisterID: effectiveCanisterID,
 		requestID:           *requestID,
+		ingressExpiry:       ingressExpiry,
 		data:                data,
 	}, nil
+}
+
+// RequestID returns the immutable request ID of the signed request. Update
+// callers can persist it before submission and later reconcile an ambiguous
+// call through certified request-status lookup without creating a duplicate.
+func (c APIRequest[In, Out]) RequestID() RequestID {
+	return c.requestID
+}
+
+// IngressExpiry returns the nanosecond UNIX timestamp embedded in the signed
+// request envelope.
+func (c APIRequest[In, Out]) IngressExpiry() uint64 {
+	return c.ingressExpiry
 }
 
 // WithEffectiveCanisterID sets the effective canister ID for the Call.
@@ -402,6 +418,12 @@ func (a Agent) ReadStateCertificate(canisterID principal.Principal, path [][]has
 // RequestStatus returns the status of the request with the given ID.
 func (a Agent) RequestStatus(ecID principal.Principal, requestID RequestID) ([]byte, hashtree.Node, error) {
 	return a.requestStatus(a.ctx, ecID, requestID)
+}
+
+// RequestStatusWithContext is like RequestStatus but bounds the certified
+// read-state request with the caller's context.
+func (a Agent) RequestStatusWithContext(ctx context.Context, ecID principal.Principal, requestID RequestID) ([]byte, hashtree.Node, error) {
+	return a.requestStatus(ctx, ecID, requestID)
 }
 
 // Sender returns the principal that is sending the requests.
