@@ -27,6 +27,7 @@ const (
 	headerICCacheStatus       = "X-Ic-Cache-Status"
 	headerICCacheBypassReason = "X-Ic-Cache-Bypass-Reason"
 	headerICRetries           = "X-Ic-Retries"
+	headerICErrorCause        = "X-Ic-Error-Cause"
 )
 
 // Client is a client for the IC agent.
@@ -124,7 +125,7 @@ func (c Client) Call(ctx context.Context, canisterID principal.Principal, data [
 		if err != nil {
 			return nil, err
 		}
-		return nil, &httpStatusError{StatusCode: resp.StatusCode, Status: resp.Status, Body: body}
+		return nil, newHTTPStatusError(resp, body)
 	}
 }
 
@@ -287,6 +288,7 @@ type httpStatusError struct {
 	Status     string
 	Body       []byte
 	RetryDelay time.Duration
+	Cause      string
 }
 
 func (e *httpStatusError) Error() string {
@@ -299,12 +301,17 @@ func (e *httpStatusError) HTTPStatusCode() int { return e.StatusCode }
 
 func (e *httpStatusError) RetryAfter() time.Duration { return e.RetryDelay }
 
+// HTTPErrorCause exposes the boundary node's X-Ic-Error-Cause header, if
+// present. Unknown values are preserved; callers own classification policy.
+func (e *httpStatusError) HTTPErrorCause() string { return e.Cause }
+
 func newHTTPStatusError(resp *http.Response, body []byte) *httpStatusError {
 	return &httpStatusError{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Body:       body,
 		RetryDelay: retryAfter(resp.Header, time.Now()),
+		Cause:      resp.Header.Get(headerICErrorCause),
 	}
 }
 

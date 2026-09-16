@@ -3,6 +3,7 @@ package agent_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -119,5 +120,53 @@ func TestQueryMetadataExposesRetryAfterAndStatusError(t *testing.T) {
 	if !errors.As(err, &throttled) || throttled.HTTPStatusCode() != http.StatusTooManyRequests ||
 		throttled.RetryAfter() != 3*time.Second {
 		t.Fatalf("error=%T %v", err, err)
+	}
+}
+
+func TestHTTPErrorCauseAcrossRequestPaths(t *testing.T) {
+	cid := principal.MustDecode("aaaaa-aa")
+	for _, path := range []string{"query", "query_metadata", "read_state", "subnet_read_state", "call"} {
+		for _, cause := range []string{"no_healthy_nodes", "replica_error", "load_shed", "future_cause", ""} {
+			t.Run(path+"/"+cause, func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					if cause != "" {
+						w.Header().Set("X-Ic-Error-Cause", cause)
+					}
+					w.Header().Set("Retry-After", "3")
+					http.Error(w, "error: deliberately_different_body", http.StatusServiceUnavailable)
+				}))
+				defer srv.Close()
+				host, _ := url.Parse(srv.URL)
+				client := agent.NewClient(agent.WithHostURL(host))
+				var err error
+				switch path {
+				case "query":
+					_, err = client.Query(context.Background(), cid, nil)
+				case "query_metadata":
+					_, _, err = client.QueryWithMetadata(context.Background(), cid, nil)
+				case "read_state":
+					_, err = client.ReadState(context.Background(), cid, nil)
+				case "subnet_read_state":
+					_, err = client.ReadSubnetState(context.Background(), cid, nil)
+				case "call":
+					_, err = client.Call(context.Background(), cid, nil)
+				}
+				var response interface {
+					HTTPStatusCode() int
+					RetryAfter() time.Duration
+					HTTPErrorCause() string
+				}
+				if err == nil || !errors.As(fmt.Errorf("request: %w", err), &response) {
+					t.Fatalf("missing structured HTTP error: %T %v", err, err)
+				}
+				if response.HTTPStatusCode() != http.StatusServiceUnavailable || response.RetryAfter() != 3*time.Second || response.HTTPErrorCause() != cause {
+					t.Fatalf("status=%d retry=%v cause=%q", response.HTTPStatusCode(), response.RetryAfter(), response.HTTPErrorCause())
+				}
+				want := "(503) 503 Service Unavailable: error: deliberately_different_body\n"
+				if err.Error() != want {
+					t.Fatalf("error text changed: got %q, want %q", err.Error(), want)
+				}
+			})
+		}
 	}
 }
