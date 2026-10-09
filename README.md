@@ -107,6 +107,23 @@ end-to-end (e2e) tests. If pocket-ic-server is not installed, those specific tes
 go test -v ./...
 ```
 
+## Candid Recursive Records
+
+Wire decoding rejects values that enter mandatory record-only cycles, returning
+`idl.ErrUninhabitedRecord` instead of overflowing the process stack. Classification
+preserves the type graph and applies to generic, typed, skipped-field and raw
+decoding. Absent optionals, empty vectors, unchosen variants and finite recursive
+lists remain supported. Backward-only type tables avoid the classification walk.
+This is not a general value-depth, memory or decode-work quota; callers must still
+bound response sizes, and further decoder resource limits remain separate work.
+
+`idl.RecordType` now contains private classification state. Use keyed literals or
+`idl.NewRecordType`, not unkeyed literals; structural comparison tools may need to
+ignore unexported fields. Programmatically built graphs are trusted input. Call
+`idl.MarkUninhabitedRecords` with a complete resolved table before decoding such
+graphs, and reclassify after editing fields. Classification and graph mutation
+must not race with decoding.
+
 ## Reference Implementations
 
 - [Rust Agent](https://github.com/dfinity/agent-rs/)

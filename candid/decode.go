@@ -187,6 +187,9 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 			return nil, nil, err
 		}
 
+		// A record-only cycle requires a forward/self record reference. Ordinary
+		// backward-only tables need no additional graph walk or allocations.
+		checkRecordCycles := false
 		// Resolve records, variants and function indices.
 		for _, tb := range tds {
 			switch t := tb.(type) {
@@ -246,6 +249,12 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 				if _, err := f(tds); err != nil {
 					return nil, nil, fmt.Errorf("unable to resolve record: %w", err)
 				}
+				for _, field := range t.Fields {
+					if _, ok := field.Type.(*idl.RecordType); ok {
+						checkRecordCycles = true
+						break
+					}
+				}
 			case *idl.FunctionType:
 				resolved := true
 				for _, f := range t.ArgumentParameters {
@@ -290,6 +299,9 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 					return nil, nil, fmt.Errorf("unable to resolve func: %w", err)
 				}
 			}
+		}
+		if checkRecordCycles {
+			idl.MarkUninhabitedRecords(tds)
 		}
 	}
 

@@ -154,6 +154,9 @@ func decodeIntoValue(t idl.Type, r *bytes.Reader, dst reflect.Value) error {
 
 	switch t := t.(type) {
 	case *idl.RecordType:
+		if t.HasMandatoryRecordCycle() {
+			return idl.ErrUninhabitedRecord
+		}
 		if dst.Kind() != reflect.Struct {
 			raw, err := t.Decode(r)
 			if err != nil {
@@ -266,6 +269,9 @@ func decodeVariantInto(t *idl.VariantType, r *bytes.Reader, dst reflect.Value) e
 func skipValue(t idl.Type, r *bytes.Reader) error {
 	switch t := t.(type) {
 	case *idl.RecordType:
+		if t.HasMandatoryRecordCycle() {
+			return idl.ErrUninhabitedRecord
+		}
 		for _, f := range t.Fields {
 			if err := skipValue(f.Type, r); err != nil {
 				return err

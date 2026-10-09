@@ -33,8 +33,9 @@ func StructToMap(value any) (map[string]any, error) {
 }
 
 type RecordType struct {
-	Fields  []FieldType
-	IsTuple bool
+	Fields      []FieldType
+	IsTuple     bool
+	uninhabited bool
 }
 
 func NewRecordType(fields map[string]Type) *RecordType {
@@ -90,6 +91,9 @@ func (record RecordType) AddTypeDefinition(tdt *TypeDefinitionTable) error {
 }
 
 func (record RecordType) Decode(r *bytes.Reader) (any, error) {
+	if record.HasMandatoryRecordCycle() {
+		return nil, ErrUninhabitedRecord
+	}
 	rec := make(map[string]any)
 	for _, f := range record.Fields {
 		v, err := f.Type.Decode(r)
@@ -143,6 +147,9 @@ func (record RecordType) EncodeValue(v any) ([]byte, error) {
 }
 
 func (record RecordType) Read(r *bytes.Reader) ([]byte, error) {
+	if record.HasMandatoryRecordCycle() {
+		return nil, ErrUninhabitedRecord
+	}
 	var raw []byte
 	for _, f := range record.Fields {
 		bs, err := f.Type.Read(r)
