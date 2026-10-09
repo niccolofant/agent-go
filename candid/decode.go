@@ -3,6 +3,7 @@ package candid
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/big"
 	"reflect"
 
@@ -90,6 +91,20 @@ func checkHeader(r *bytes.Reader) error {
 	return nil
 }
 
+// Type declarations and type-table byte strings consume at least one byte per element.
+// Bound their lengths before integer conversion, allocation or iteration. This
+// does not apply to value vectors, whose elements can have zero-byte encodings.
+func decodeTypeLength(r *bytes.Reader) (int, error) {
+	n, err := leb128.DecodeUnsigned(r)
+	if err != nil {
+		return 0, err
+	}
+	if !n.IsInt64() || n.Int64() < 0 || n.Int64() > int64(r.Len()) {
+		return 0, fmt.Errorf("invalid type length %s with %d bytes remaining", n, r.Len())
+	}
+	return int(n.Int64()), nil
+}
+
 func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 	if len(bs) == 0 {
 		return nil, nil, &idl.FormatError{
@@ -105,13 +120,13 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 
 	var tds []idl.Type
 	{ // T
-		tdtl, err := leb128.DecodeUnsigned(r)
+		tdtl, err := decodeTypeLength(r)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		var tc typeCache
-		for range int(tdtl.Int64()) {
+		for range tdtl {
 			tid, err := leb128.DecodeSigned(r)
 			if err != nil {
 				return nil, nil, err
@@ -157,12 +172,11 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 				if o >= 0 {
 					return nil, nil, fmt.Errorf("invalid opcode: %d", o)
 				}
-				count, err := leb128.DecodeUnsigned(r)
+				count, err := decodeTypeLength(r)
 				if err != nil {
 					return nil, nil, err
 				}
-				skip := make([]byte, count.Int64())
-				if _, err := r.Read(skip); err != nil {
+				if _, err := r.Seek(int64(count), io.SeekCurrent); err != nil {
 					return nil, nil, err
 				}
 				tds = append(tds, &idl.FutureType{OpCode: o})
@@ -201,8 +215,8 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 					}
 					return t, nil
 				}
-				if v, err := f(tds); v == nil || err != nil {
-					return nil, nil, fmt.Errorf("unable to resolve variant: %v", t)
+				if _, err := f(tds); err != nil {
+					return nil, nil, fmt.Errorf("unable to resolve variant: %w", err)
 				}
 			case *idl.RecordType:
 				resolved := true
@@ -229,8 +243,8 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 					}
 					return t, nil
 				}
-				if v, err := f(tds); v == nil || err != nil {
-					return nil, nil, fmt.Errorf("unable to resolve record: %v", t)
+				if _, err := f(tds); err != nil {
+					return nil, nil, fmt.Errorf("unable to resolve record: %w", err)
 				}
 			case *idl.FunctionType:
 				resolved := true
@@ -272,21 +286,21 @@ func decodeTypes(bs []byte) ([]idl.Type, *bytes.Reader, error) {
 					}
 					return t, nil
 				}
-				if v, err := f(tds); v == nil || err != nil {
-					return nil, nil, fmt.Errorf("unable to resolve func: %v", t)
+				if _, err := f(tds); err != nil {
+					return nil, nil, fmt.Errorf("unable to resolve func: %w", err)
 				}
 			}
 		}
 	}
 
-	tsl, err := leb128.DecodeUnsigned(r)
+	tsl, err := decodeTypeLength(r)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var ts []idl.Type
 	{ // I
-		for i := 0; i < int(tsl.Int64()); i++ {
+		for range tsl {
 			tid, err := leb128.DecodeSigned(r)
 			if err != nil {
 				return nil, nil, err
@@ -318,13 +332,13 @@ type typeCache struct {
 }
 
 func (tc *typeCache) decodeFieldsSubType(r *bytes.Reader, tds []idl.Type) ([]idl.FieldType, error) {
-	l, err := leb128.DecodeUnsigned(r)
+	l, err := decodeTypeLength(r)
 	if err != nil {
 		return nil, err
 	}
 	var fields []idl.FieldType
 	var prev *big.Int
-	for i := 0; i < int(l.Int64()); i++ {
+	for range l {
 		h, err := leb128.DecodeUnsigned(r)
 		if err != nil {
 			return nil, err
@@ -362,12 +376,12 @@ func (tc *typeCache) decodeFieldsSubType(r *bytes.Reader, tds []idl.Type) ([]idl
 }
 
 func (tc *typeCache) decodeFuncOpCode(r *bytes.Reader, tds []idl.Type) (idl.Type, error) {
-	la, err := leb128.DecodeUnsigned(r)
+	la, err := decodeTypeLength(r)
 	if err != nil {
 		return nil, err
 	}
 	var args []idl.FunctionParameter
-	for i := 0; i < int(la.Int64()); i++ {
+	for range la {
 		tid, err := leb128.DecodeSigned(r)
 		if err != nil {
 			return nil, err
@@ -384,12 +398,12 @@ func (tc *typeCache) decodeFuncOpCode(r *bytes.Reader, tds []idl.Type) (idl.Type
 		}
 	}
 
-	lr, err := leb128.DecodeUnsigned(r)
+	lr, err := decodeTypeLength(r)
 	if err != nil {
 		return nil, err
 	}
 	var rets []idl.FunctionParameter
-	for i := 0; i < int(lr.Int64()); i++ {
+	for range lr {
 		tid, err := leb128.DecodeSigned(r)
 		if err != nil {
 			return nil, err
@@ -406,11 +420,11 @@ func (tc *typeCache) decodeFuncOpCode(r *bytes.Reader, tds []idl.Type) (idl.Type
 		}
 	}
 
-	l, err := leb128.DecodeUnsigned(r)
+	l, err := decodeTypeLength(r)
 	if err != nil {
 		return nil, err
 	}
-	ann := make([]byte, l.Int64())
+	ann := make([]byte, l)
 	if _, err := r.Read(ann); err != nil {
 		return nil, err
 	}
@@ -459,22 +473,22 @@ func (tc *typeCache) decodeRecOpCode(r *bytes.Reader, tds []idl.Type) (idl.Type,
 }
 
 func (tc *typeCache) decodeServiceOpCode(r *bytes.Reader, tds []idl.Type) (idl.Type, error) {
-	l, err := leb128.DecodeUnsigned(r)
+	l, err := decodeTypeLength(r)
 	if err != nil {
 		return nil, err
 	}
 	var methods []idl.Method
-	for i := 0; i < int(l.Int64()); i++ {
-		lm, err := leb128.DecodeUnsigned(r)
+	for range l {
+		lm, err := decodeTypeLength(r)
 		if err != nil {
 			return nil, err
 		}
-		name := make([]byte, lm.Int64())
+		name := make([]byte, lm)
 		n, err := r.Read(name)
 		if err != nil {
 			return nil, err
 		}
-		if n != int(lm.Int64()) {
+		if n != lm {
 			return nil, fmt.Errorf("invalid method name: %s", name)
 		}
 

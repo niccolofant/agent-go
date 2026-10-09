@@ -21,14 +21,14 @@ func (PrincipalType) Decode(r *bytes.Reader) (any, error) {
 	if b != 0x01 {
 		return nil, fmt.Errorf("cannot decode principal")
 	}
-	l, err := leb128.DecodeUnsigned(r)
+	l, err := decodeLen(r)
 	if err != nil {
 		return nil, err
 	}
-	if l.Uint64() == 0 {
+	if l == 0 {
 		return principal.Principal{Raw: []byte{}}, nil
 	}
-	v := make([]byte, l.Uint64())
+	v := make([]byte, l)
 	if _, err := r.Read(v); err != nil {
 		return nil, err
 	}
@@ -67,11 +67,17 @@ func (PrincipalType) Read(r *bytes.Reader) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if l.Uint64() == 0 {
+	n, err := checkLen(l, r)
+	if err != nil {
+		return nil, err
+	}
+	if n == 0 {
 		return append([]byte{b}, raw...), nil
 	}
-	bs := make([]byte, 1+len(raw)+int(l.Uint64()))
-	if _, err := r.Read(bs[len(raw)+2:]); err != nil {
+	bs := make([]byte, 1+len(raw)+n)
+	bs[0] = b
+	copy(bs[1:], raw)
+	if _, err := r.Read(bs[1+len(raw):]); err != nil {
 		return nil, err
 	}
 	return bs, nil
