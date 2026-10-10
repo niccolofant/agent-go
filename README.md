@@ -115,6 +115,36 @@ non-execution**. Poll the original request status rather than automatically
 constructing a replacement. Expiry does not undo a request already processing.
 See the [IC HTTPS interface](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/).
 
+### Signed Call Recovery
+
+`request.ExportCall()` returns an owned, authenticated `PreparedCall` snapshot.
+Persist its `Envelope()` bytes and request metadata in durable intent storage
+before transmission. `agent.RestorePreparedCall(raw)` verifies a saved envelope
+against that agent's configured signing identity and preserves its exact bytes,
+request ID, and ingress expiry. Neither API submits, retries, signs a replacement,
+fetches a root key, or queries request status. Slice getters return copies.
+
+This opt-in API supports direct self-authenticating signed calls with the SDK's
+Ed25519, P-256 and secp256k1 identities, not anonymous calls, queries, delegations
+or management-canister routing. It rejects unknown/duplicate fields, invalid
+wire types, indefinite CBOR, and unsupported tags. Recovery is bounded to 2 MiB,
+method names to 1..128 ASCII bytes (0x21..0x7e), nonces to absent or 1..32 bytes,
+and expiry to positive int64 Unix nanoseconds.
+An explicit empty nonce is rejected because field presence affects request IDs.
+Existing call/query APIs are unchanged.
+
+Expired envelopes are accepted for reconciliation, **not permission to resend**.
+Authentication does not establish submission, execution, acceptable arguments,
+maximum debit or settlement. Applications must independently check those, retain
+unresolved reservations, and compare every recovered metadata field.
+`RootKeyHash()` records the agent's local trust context; the ingress signature
+does not bind a network. Compare it to independently trusted configuration,
+never a root inferred from the envelope. Keep identity/root configuration
+immutable in use and protect stored signed bytes as a submission capability.
+Deduplicate by request ID, not envelope bytes: equivalent encodings/signatures
+can have the same request ID. Authentication does not guarantee replica
+acceptance under the network's signature and expiry policies.
+
 ## Packages
 
 You can find the documentation for each package in the links below. Examples can be found throughout the documentation.
