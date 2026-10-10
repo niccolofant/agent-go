@@ -7,10 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/niccolofant/agent-go/certification"
 	"github.com/niccolofant/agent-go/certification/hashtree"
 	"github.com/niccolofant/agent-go/principal"
-	"github.com/fxamacker/cbor/v2"
 )
 
 type BEHexUint64 uint64
@@ -94,6 +94,9 @@ func (d DelegationChain) VerifyChallenge(
 	}
 	if err := cbor.Unmarshal(sig, &wrapper); err != nil {
 		return err
+	}
+	if wrapper.Tree.Root == nil {
+		return fmt.Errorf("missing canister signature tree")
 	}
 	var certificate certification.Certificate
 	if err := cbor.Unmarshal(wrapper.Certificate, &certificate); err != nil {

@@ -3,8 +3,10 @@ package ii
 import (
 	"encoding/hex"
 	"encoding/json"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/niccolofant/agent-go/certification"
 	"github.com/niccolofant/agent-go/principal"
+	"strings"
 	"testing"
 )
 
@@ -40,5 +42,20 @@ func TestVerifyChallenge(t *testing.T) {
 		rootKey,
 	); err != nil {
 		t.Fatal(err)
+	}
+	// Keep the previously verified key, challenge and delegation, omitting
+	// only the canister-signature witness from its CBOR wrapper.
+	var wrapper map[string]cbor.RawMessage
+	if err := cbor.Unmarshal([]byte(dc.Delegations[0].Signature), &wrapper); err != nil {
+		t.Fatal(err)
+	}
+	delete(wrapper, "tree")
+	raw, err := cbor.Marshal(wrapper)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dc.Delegations[0].Signature = HexString(raw)
+	if err := dc.VerifyChallenge(challenge, expiration-42, canisterID, rootKey); err == nil || !strings.Contains(err.Error(), "missing canister signature tree") {
+		t.Fatal("missing canister signature tree guard", err)
 	}
 }

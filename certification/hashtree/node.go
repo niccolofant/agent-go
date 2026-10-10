@@ -159,6 +159,9 @@ func Deserialize(data []byte) (Node, error) {
 }
 
 func DeserializeNode(s []any) (Node, error) {
+	if len(s) == 0 {
+		return nil, fmt.Errorf("missing hash-tree node tag")
+	}
 	tag, ok := s[0].(uint64)
 	if !ok {
 		return nil, fmt.Errorf("unknown tag: %v", s[0])

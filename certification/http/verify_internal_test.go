@@ -23,6 +23,14 @@ const noHeadersCertExpr = `default_certification(ValidationArgs{certification:Ce
 
 var fakeCanister = principal.Principal{Raw: []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01}}
 
+func TestVerifierRejectsMissingWitnessTree(t *testing.T) {
+	cert, root := buildSignedCertificate(t, fakeCanister, [32]byte{})
+	v := Verifier{CanisterID: fakeCanister, RootKey: root}
+	if err := v.verifyCanisterTreeBinding(&CertificateHeader{Certificate: cert}); err == nil || !strings.Contains(err.Error(), "missing canister witness tree") {
+		t.Fatal("missing witness guard", err)
+	}
+}
+
 func TestVerifier_V1_FallbackRejectsMismatchedBody(t *testing.T) {
 	indexBody := []byte("<html></html>")
 	indexHash := sha256.Sum256(indexBody)

@@ -326,6 +326,9 @@ func (v Verifier) Verify(path string, req *Request, resp *Response) error {
 // verifyCanisterTreeBinding asserts that the canister-side tree root
 // matches the certified_data leaf the IC state tree commits to.
 func (v Verifier) verifyCanisterTreeBinding(certificateHeader *CertificateHeader) error {
+	if certificateHeader.Tree.Root == nil {
+		return fmt.Errorf("missing canister witness tree")
+	}
 	certifiedData, err := certificateHeader.Certificate.Tree.Lookup(
 		hashtree.Label("canister"), v.CanisterID.Raw, hashtree.Label("certified_data"),
 	)

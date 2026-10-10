@@ -159,6 +159,9 @@ func VerifySubnetCertificate(
 }
 
 func verifyCertificateSignature(certificate Certificate, publicKey *bls.PublicKey) error {
+	if certificate.Tree.Root == nil {
+		return fmt.Errorf("missing certificate tree")
+	}
 	rootHash := certificate.Tree.Digest()
 	message := append(hashtree.DomainSeparator("ic-state-root"), rootHash[:]...)
 	signature, err := bls.SignatureFromBytes(certificate.Signature)
