@@ -72,6 +72,49 @@ config := agent.Config{
 }
 ```
 
+### Request Timing
+
+Timing controls are independent when explicitly configured:
+
+| Config field | Bounds | Default |
+| --- | --- | --- |
+| `IngressExpiry` | Signed envelope validity from construction | 5 minutes |
+| `CallTimeout` | Initial update HTTP request | Inherits `IngressExpiry` |
+| `QueryTimeout` | Query exchange and synchronous verification-key reads | Inherits `IngressExpiry` |
+| `CertificateMaxAge` | Accepted age of call/read-state certificates | Inherits `IngressExpiry` |
+| `ReadStateTimeout` | Each read-state HTTP request | 5 seconds |
+| `PollTimeout` | Result-poll loop after the initial call | 10 seconds |
+| `PollDelay` | Delay between result polls | 1 second |
+
+The three new controls reject negative values. Their zero values preserve
+existing behavior, including when `IngressExpiry` is customized. Caller
+deadlines and any underlying HTTP client timeout can impose a tighter bound.
+The query deadline does not preempt local decoding or cryptographic work.
+`CertificateMaxAge` also sets the query-verification key cache's age policy;
+it does not certify a query's application state or impose a query-response age.
+Increasing it accepts older certified state, including older verification keys,
+and weakens replay protection. A value below normal certification lag plus clock
+skew can reject legitimate replies. Choose it from those requirements, not from
+the desired envelope TTL.
+
+Use `RequestOptions{IngressExpiry: time.Now().Add(ttl)}` with
+`CreateAPIRequestWithOptions`, `CreateCandidAPIRequestWithOptions`,
+`CreateProtoAPIRequestWithOptions` or `CreateRawAPIRequestWithOptions` to choose
+an absolute expiry for one request. Zero uses the agent default. Explicit
+expiries must be future positive timestamps representable in int64 Unix
+nanoseconds; the network still enforces its own permitted expiry window.
+Expiry is checked after argument encoding, before signing. Signer and dispatch
+latency can consume the remaining validity; construction does not guarantee
+that a later submission will still be valid.
+
+Options do not mutate the shared agent or change HTTP/certificate/poll limits.
+Reusing a prepared request reuses its signed bytes, request ID and expiry; it
+does not renew the expiry. Persist the original request identity for recovery.
+An update's expiry, a cancelled wait or a transport timeout is **not proof of
+non-execution**. Poll the original request status rather than automatically
+constructing a replacement. Expiry does not undo a request already processing.
+See the [IC HTTPS interface](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/).
+
 ## Packages
 
 You can find the documentation for each package in the links below. Examples can be found throughout the documentation.

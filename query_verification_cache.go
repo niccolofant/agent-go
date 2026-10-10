@@ -35,12 +35,12 @@ type queryVerificationKeySet struct {
 	validUntil     time.Time
 }
 
-func newQueryVerificationKeyCache(ingressExpiry time.Duration) *queryVerificationKeyCache {
+func newQueryVerificationKeyCache(certificateMaxAge time.Duration) *queryVerificationKeyCache {
 	maxAge := 30 * time.Second
-	if 0 < ingressExpiry && ingressExpiry < maxAge {
-		maxAge = ingressExpiry / 2
+	if 0 < certificateMaxAge && certificateMaxAge < maxAge {
+		maxAge = certificateMaxAge / 2
 		if maxAge <= 0 {
-			maxAge = ingressExpiry
+			maxAge = certificateMaxAge
 		}
 	}
 

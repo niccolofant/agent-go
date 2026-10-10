@@ -136,12 +136,32 @@ func CreateAPIRequest[In, Out any](
 	methodName string,
 	in In,
 ) (*APIRequest[In, Out], error) {
+	return CreateAPIRequestWithOptions(a, marshal, unmarshal, typ, canisterID, effectiveCanisterID, methodName, in, RequestOptions{})
+}
+
+// CreateAPIRequestWithOptions is CreateAPIRequest with construction-time options.
+// Options are applied before signing; the resulting envelope and request ID do
+// not change on reuse. They do not change the agent's transport or poll budgets.
+func CreateAPIRequestWithOptions[In, Out any](
+	a *Agent,
+	marshal func(In) ([]byte, error),
+	unmarshal func([]byte, Out) error,
+	typ RequestType,
+	canisterID principal.Principal,
+	effectiveCanisterID principal.Principal,
+	methodName string,
+	in In,
+	opts RequestOptions,
+) (*APIRequest[In, Out], error) {
 	rawArgs, err := marshal(in)
 	if err != nil {
 		return nil, err
 	}
+	ingressExpiry, err := a.requestExpiry(opts)
+	if err != nil {
+		return nil, err
+	}
 	nonce := newNonce()
-	ingressExpiry := a.expiryDate()
 	requestID, data, err := a.sign(Request{
 		Type:          typ,
 		Sender:        a.Sender(),
@@ -191,6 +211,9 @@ type Agent struct {
 	ctx                    context.Context
 	identity               identity.Identity
 	ingressExpiry          time.Duration
+	callTimeout            time.Duration
+	queryTimeout           time.Duration
+	certificateMaxAge      time.Duration
 	readStateTimeout       time.Duration
 	rootKey                []byte
 	logger                 Logger
@@ -205,6 +228,18 @@ type Agent struct {
 func New(cfg Config) (*Agent, error) {
 	if cfg.IngressExpiry == 0 {
 		cfg.IngressExpiry = 5 * time.Minute
+	}
+	if cfg.CallTimeout < 0 || cfg.QueryTimeout < 0 || cfg.CertificateMaxAge < 0 {
+		return nil, errors.New("CallTimeout, QueryTimeout and CertificateMaxAge must not be negative")
+	}
+	if cfg.CallTimeout == 0 {
+		cfg.CallTimeout = cfg.IngressExpiry
+	}
+	if cfg.QueryTimeout == 0 {
+		cfg.QueryTimeout = cfg.IngressExpiry
+	}
+	if cfg.CertificateMaxAge == 0 {
+		cfg.CertificateMaxAge = cfg.IngressExpiry
 	}
 	// By default, use the anonymous identity.
 	var id identity.Identity = new(identity.AnonymousIdentity)
@@ -240,6 +275,9 @@ func New(cfg Config) (*Agent, error) {
 		ctx:                    context.Background(),
 		identity:               id,
 		ingressExpiry:          cfg.IngressExpiry,
+		callTimeout:            cfg.CallTimeout,
+		queryTimeout:           cfg.QueryTimeout,
+		certificateMaxAge:      cfg.CertificateMaxAge,
 		readStateTimeout:       readStateTimeout,
 		rootKey:                rootKey,
 		logger:                 client.logger,
@@ -248,7 +286,7 @@ func New(cfg Config) (*Agent, error) {
 		sender:                 id.Sender(),
 		senderPubKey:           id.PublicKey(),
 		verifySignatures:       !cfg.DisableSignedQueryVerification,
-		queryVerificationCache: newQueryVerificationKeyCache(cfg.IngressExpiry),
+		queryVerificationCache: newQueryVerificationKeyCache(cfg.CertificateMaxAge),
 	}
 	if cfg.RouteProvider != nil {
 		a.client.SetRouteProvider(cfg.RouteProvider)
@@ -264,7 +302,12 @@ func (a Agent) Client() *Client {
 
 // CreateCandidAPIRequest creates a new api request to the given canister and method.
 func (a *Agent) CreateCandidAPIRequest(typ RequestType, canisterID principal.Principal, methodName string, args ...any) (*CandidAPIRequest, error) {
-	return CreateAPIRequest(
+	return a.CreateCandidAPIRequestWithOptions(typ, canisterID, methodName, RequestOptions{}, args...)
+}
+
+// CreateCandidAPIRequestWithOptions applies options before signing a Candid request.
+func (a *Agent) CreateCandidAPIRequestWithOptions(typ RequestType, canisterID principal.Principal, methodName string, opts RequestOptions, args ...any) (*CandidAPIRequest, error) {
+	return CreateAPIRequestWithOptions(
 		a,
 		candid.Marshal,
 		candid.Unmarshal,
@@ -273,12 +316,18 @@ func (a *Agent) CreateCandidAPIRequest(typ RequestType, canisterID principal.Pri
 		effectiveCanisterID(canisterID, args),
 		methodName,
 		args,
+		opts,
 	)
 }
 
 // CreateProtoAPIRequest creates a new api request to the given canister and method.
 func (a *Agent) CreateProtoAPIRequest(typ RequestType, canisterID principal.Principal, methodName string, message proto.Message) (*ProtoAPIRequest, error) {
-	return CreateAPIRequest(
+	return a.CreateProtoAPIRequestWithOptions(typ, canisterID, methodName, message, RequestOptions{})
+}
+
+// CreateProtoAPIRequestWithOptions applies options before signing a Protobuf request.
+func (a *Agent) CreateProtoAPIRequestWithOptions(typ RequestType, canisterID principal.Principal, methodName string, message proto.Message, opts RequestOptions) (*ProtoAPIRequest, error) {
+	return CreateAPIRequestWithOptions(
 		a,
 		func(m proto.Message) ([]byte, error) {
 			raw, err := proto.Marshal(m)
@@ -297,6 +346,7 @@ func (a *Agent) CreateProtoAPIRequest(typ RequestType, canisterID principal.Prin
 		canisterID,
 		methodName,
 		message,
+		opts,
 	)
 }
 
@@ -310,7 +360,12 @@ func (a *Agent) CreateProtoAPIRequest(typ RequestType, canisterID principal.Prin
 //	var reply []byte
 //	_ = req.CallAndWait(&reply)
 func (a *Agent) CreateRawAPIRequest(typ RequestType, canisterID principal.Principal, methodName string, arg []byte) (*RawAPIRequest, error) {
-	return CreateAPIRequest(
+	return a.CreateRawAPIRequestWithOptions(typ, canisterID, methodName, arg, RequestOptions{})
+}
+
+// CreateRawAPIRequestWithOptions applies options before signing an unencoded request.
+func (a *Agent) CreateRawAPIRequestWithOptions(typ RequestType, canisterID principal.Principal, methodName string, arg []byte, opts RequestOptions) (*RawAPIRequest, error) {
+	return CreateAPIRequestWithOptions(
 		a,
 		func(b []byte) ([]byte, error) { return b, nil },
 		func(raw []byte, out *[]byte) error { *out = raw; return nil },
@@ -319,6 +374,7 @@ func (a *Agent) CreateRawAPIRequest(typ RequestType, canisterID principal.Princi
 		canisterID,
 		methodName,
 		arg,
+		opts,
 	)
 }
 
@@ -432,7 +488,7 @@ func (a Agent) Sender() principal.Principal {
 }
 
 func (a Agent) call(ctx context.Context, ecID principal.Principal, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, a.ingressExpiry)
+	ctx, cancel := context.WithTimeout(ctx, a.callTimeout)
 	defer cancel()
 	return a.client.Call(ctx, ecID, data)
 }
@@ -537,7 +593,7 @@ func (a Agent) readStateCertificate(ctx context.Context, ecID principal.Principa
 	if err := cbor.Unmarshal(resp["certificate"], &certificate); err != nil {
 		return nil, err
 	}
-	if err := certificate.VerifyTime(a.ingressExpiry); err != nil {
+	if err := certificate.VerifyTime(a.certificateMaxAge); err != nil {
 		return nil, err
 	}
 	if err := certification.VerifyCertificate(certificate, ecID, a.rootKey); err != nil {
@@ -588,7 +644,7 @@ func (a Agent) ReadSubnetStateCertificateContext(ctx context.Context, subnetID p
 	if err := cbor.Unmarshal(resp["certificate"], &certificate); err != nil {
 		return nil, err
 	}
-	if err := certificate.VerifyTime(a.ingressExpiry); err != nil {
+	if err := certificate.VerifyTime(a.certificateMaxAge); err != nil {
 		return nil, err
 	}
 	if err := certification.VerifySubnetCertificate(certificate, subnetID, a.rootKey); err != nil {
@@ -633,6 +689,22 @@ type Config struct {
 	// IngressExpiry is the duration for which an ingress message is valid.
 	// The default is set to 5 minutes.
 	IngressExpiry time.Duration
+	// CallTimeout bounds the initial update HTTP request, not result polling.
+	// Zero inherits IngressExpiry for compatibility. Must not be negative.
+	// A timeout is not proof that the update was not executed.
+	CallTimeout time.Duration
+	// QueryTimeout sets the deadline for each query and any synchronous reads
+	// needed to verify its response. It does not preempt local decoding/crypto.
+	// Zero inherits IngressExpiry. Must not be negative. Caller deadlines apply.
+	QueryTimeout time.Duration
+	// CertificateMaxAge is the allowed age of call and read_state certificates.
+	// Zero inherits IngressExpiry for compatibility. Must not be negative.
+	// It also bounds query-verification key-cache retention. This does not make
+	// an uncertified query result fresh or change signature verification.
+	// Increasing this accepts older certified state (including verification
+	// keys), weakening replay protection. Too small a value rejects normal
+	// certification lag and clock skew. Choose independently of envelope TTL.
+	CertificateMaxAge time.Duration
 	// ClientConfig is the configuration for the underlying Client.
 	ClientConfig []ClientOption
 	// FetchRootKey determines whether the root key should be fetched from the IC.

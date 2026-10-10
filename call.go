@@ -20,8 +20,8 @@ func (c APIRequest[_, Out]) CallAndWait(out Out) error {
 }
 
 // CallAndWaitWithContext is like CallAndWait but uses the given context as the parent
-// of the per-request timeouts and the polling loop, letting the caller cancel an
-// in-flight update call.
+// of the per-request timeouts and the polling loop. Cancellation stops waiting;
+// it does not undo an update that the network has already accepted.
 func (c APIRequest[_, Out]) CallAndWaitWithContext(ctx context.Context, out Out) error {
 	c.a.logger.Printf("[AGENT] CALL %s %s (%x)", c.effectiveCanisterID, c.methodName, c.requestID)
 	rawCertificate, err := c.a.call(ctx, c.effectiveCanisterID, c.data)
@@ -43,7 +43,7 @@ func (c APIRequest[_, Out]) CallAndWaitWithContext(ctx context.Context, out Out)
 		// canister-range checks used by read_state. If validation fails, the
 		// update may still have executed, so resolve it through certified polling
 		// instead of returning a potentially false failure.
-		if err := certificate.VerifyTime(c.a.ingressExpiry); err != nil {
+		if err := certificate.VerifyTime(c.a.certificateMaxAge); err != nil {
 			goto poll
 		}
 		if err := certification.VerifyCertificate(certificate, c.effectiveCanisterID, c.a.rootKey); err != nil {
@@ -113,8 +113,8 @@ func (a Agent) CallRaw(canisterID principal.Principal, methodName string, arg []
 }
 
 // CallWithContext is like Call but uses the given context as the parent of the
-// per-request timeouts and the polling loop, letting the caller cancel an in-flight
-// update call.
+// per-request timeouts and the polling loop. Cancellation stops waiting, not
+// execution of an update already accepted by the network.
 func (a Agent) CallWithContext(ctx context.Context, canisterID principal.Principal, methodName string, in []any, out []any) error {
 	call, err := a.CreateCandidAPIRequest(RequestTypeCall, canisterID, methodName, in...)
 	if err != nil {

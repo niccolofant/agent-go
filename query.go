@@ -74,7 +74,7 @@ func (q APIRequest[In, Out]) queryRawContext(
 	if ctx == nil {
 		ctx = q.a.ctx
 	}
-	ctx, cancel := context.WithTimeout(ctx, q.a.ingressExpiry)
+	ctx, cancel := context.WithTimeout(ctx, q.a.queryTimeout)
 	defer cancel()
 	var rawResp []byte
 	var err error
