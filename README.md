@@ -145,6 +145,48 @@ Deduplicate by request ID, not envelope bytes: equivalent encodings/signatures
 can have the same request ID. Authentication does not guarantee replica
 acceptance under the network's signature and expiry policies.
 
+### Certified Call Outcomes
+
+`agent.VerifyCallCertificate(prepared, certificate, opts)` is a pure offline
+verification API. Pass the inner certificate blob, not the HTTP response wrapper.
+It binds BLS/delegation verification and the request-status proof
+to an authenticated `PreparedCall` and the agent's configured sender/root.
+Delegated certificates also require canister-range authorization as of the
+delegation. Root-signed certificates trust the root directly, without ranges.
+`SubnetID()` identifies the attesting subnet when delegated, not current routing
+after a migration. It returns false for root-signed evidence.
+Set an explicit positive `CallCertificateOptions.MaxAge` and nonnegative
+`MaxFutureSkew`; these bound the response certificate's time, not ingress expiry
+or the long-lived delegation. It performs no I/O, signing, polling or retry.
+
+The immutable result retains owned certificate bytes, request identity and
+certified time. `Reply()` distinguishes an empty reply from no reply. Its bytes
+are opaque: a canister can reply with an application-level error. `Rejection()`
+provides the IC reject code/message and optional error code, not economic
+settlement. A rejected request may already have had partial effects.
+
+`received` and `processing` remain pending; `done` means the response was
+forgotten. `absent` proves only that the status path was absent in the signing
+subnet's state at certificate time. `unproven` means the witness pruned the path. **None of these statuses,
+including rejection or expiry, authorizes resubmission or release of funds.**
+Keep unresolved intent until application-specific durable reconciliation.
+Old saved evidence may fail a new freshness check; historical replay requires
+an application's durable evidence/settlement policy, not bypassing freshness.
+
+The opt-in parser bounds certificates to 4 MiB, one delegation, tree depth 64,
+4,096 total tree nodes and 64 MiB aggregate recursive tree decode work. It
+accepts definite CBOR, optional outer self-describe tags and strict blob types;
+duplicates, unknown fields, null blobs and incomplete response proofs fail.
+The work budget also permits substantial temporary memory (recursive copies
+plus decode buffers/overhead); bound concurrent verification of untrusted data.
+Certificate encodings are not canonical: never deduplicate by proof bytes.
+`ErrCallCertificateContext` identifies invalid local policy or trust/call
+context, which cannot be fixed by trying another relay. Invalid evidence returns
+`ErrInvalidCallCertificate`. Neither error authorizes releasing an intent.
+Existing call/query behavior is unchanged. See the
+[IC certification specification](https://docs.internetcomputer.org/references/ic-interface-spec/certification/)
+and [request lifecycle](https://docs.internetcomputer.org/references/ic-interface-spec/https-interface/).
+
 ## Packages
 
 You can find the documentation for each package in the links below. Examples can be found throughout the documentation.
